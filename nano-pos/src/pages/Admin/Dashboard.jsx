@@ -1,159 +1,198 @@
-import { useQuery } from "@tanstack/react-query"; // <--- La herramienta pro
+import React, { useState, useEffect } from "react";
 import { supabase } from "../../services/supabase";
-import { useNavigate } from "react-router-dom";
 import {
-    TrendingUp,
-    ShoppingBag,
+    Store,
     DollarSign,
-    Calendar,
+    Clock,
+    AlertTriangle,
+    CheckCircle,
     ArrowLeft,
-    Loader2,
 } from "lucide-react";
-
-// Función extractora (separada del componente para evitar recreaciones)
-const fetchVentasDelDia = async () => {
-    const { data, error } = await supabase
-        .from("ventas")
-        .select(
-            `
-      id, 
-      total, 
-      created_at, 
-      metodo_pago
-    `,
-        )
-        .order("created_at", { ascending: false })
-        .limit(20);
-
-    if (error) throw new Error(error.message);
-    return data;
-};
+import { useNavigate } from "react-router-dom";
 
 export default function Dashboard() {
+    const [turnosHoy, setTurnosHoy] = useState([]);
+    const [loading, setLoading] = useState(true);
     const navigate = useNavigate();
 
-    // useQuery maneja: loading, error, data, caché y reintentos automáticos
-    const {
-        data: ventas,
-        isLoading,
-        isError,
-        error,
-    } = useQuery({
-        queryKey: ["ventasDashboard"], // Identificador único para la caché
-        queryFn: fetchVentasDelDia,
-    });
+    // Simulamos los 4 locales de la galería
+    const localesGaleria = [
+        { id: 1, nombre: "Zapatería", color: "bg-blue-600" },
+        { id: 2, nombre: "Ropa", color: "bg-purple-600" },
+        { id: 3, nombre: "Librería", color: "bg-orange-600" },
+        { id: 4, nombre: "Regalería", color: "bg-emerald-600" },
+    ];
 
-    // Cálculos derivados (siempre seguros porque 'ventas' o es undefined o es array real)
-    const stats = {
-        total: ventas?.reduce((acc, v) => acc + v.total, 0) || 0,
-        count: ventas?.length || 0,
+    useEffect(() => {
+        cargarEstadoCajas();
+    }, []);
+
+    const cargarEstadoCajas = async () => {
+        try {
+            // Obtenemos la fecha de hoy a la medianoche para filtrar
+            const hoyInicio = new Date();
+            hoyInicio.setHours(0, 0, 0, 0);
+
+            const { data, error } = await supabase
+                .from("turnos_caja")
+                .select("*")
+                .gte("fecha_apertura", hoyInicio.toISOString()) // Solo los de hoy
+                .order("fecha_apertura", { ascending: false });
+
+            if (error) throw error;
+            setTurnosHoy(data || []);
+        } catch (error) {
+            console.error("Error cargando dashboard:", error);
+        } finally {
+            setLoading(false);
+        }
     };
 
-    // Estado de Carga (UI Feedback)
-    if (isLoading)
-        return (
-            <div className="min-h-screen flex items-center justify-center bg-gray-100 text-gray-500">
-                <Loader2 className="animate-spin mr-2" /> Cargando métricas...
-            </div>
-        );
+    // Función para encontrar el turno más reciente de un local específico
+    const obtenerTurnoLocal = (localId) => {
+        return turnosHoy.find((t) => Number(t.local_id) === localId);
+    };
 
-    // Estado de Error (Robustez)
-    if (isError)
+    if (loading) {
         return (
-            <div className="min-h-screen flex items-center justify-center bg-gray-100 text-red-500">
-                Error cargando datos: {error.message}
+            <div className="min-h-screen bg-gray-900 flex items-center justify-center text-white text-xl">
+                Cargando métricas de la galería...
             </div>
         );
+    }
 
     return (
-        <div className="min-h-screen bg-gray-100 p-8 text-gray-800">
-            {/* Encabezado */}
-            <div className="flex justify-between items-center mb-8">
+        <div className="min-h-screen bg-gray-900 text-white p-6 lg:p-10">
+            {/* Header del Dashboard */}
+            <div className="flex justify-between items-center mb-10 border-b border-gray-800 pb-6">
                 <div>
-                    <h1 className="text-3xl font-bold">Panel de Control</h1>
-                    <p className="text-gray-500">Resumen en tiempo real</p>
+                    <h1 className="text-3xl font-bold flex items-center gap-3">
+                        <Store className="text-blue-500 w-8 h-8" />
+                        Centro de Comando Multirubro
+                    </h1>
+                    <p className="text-gray-400 mt-2">
+                        Monitoreo de cajas en tiempo real - Esquina
+                    </p>
                 </div>
+
                 <button
                     onClick={() => navigate("/pos")}
-                    className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition shadow-sm"
+                    className="flex items-center gap-2 bg-gray-800 hover:bg-gray-700 px-6 py-3 rounded-xl transition-colors font-medium border border-gray-700"
                 >
-                    <ArrowLeft size={18} /> Volver al Cajero
+                    <ArrowLeft size={20} /> Ir al Mostrador (POS)
                 </button>
             </div>
 
-            {/* Tarjetas de Métricas */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-                <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 flex items-center justify-between">
-                    <div>
-                        <p className="text-gray-500 text-sm font-bold uppercase">
-                            Ventas Totales
-                        </p>
-                        <p className="text-3xl font-bold mt-1 text-green-600">
-                            ${stats.total.toLocaleString()}
-                        </p>
-                    </div>
-                    <div className="p-3 bg-green-100 text-green-600 rounded-full">
-                        <DollarSign size={24} />
-                    </div>
-                </div>
+            {/* Grilla de los 4 Locales */}
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+                {localesGaleria.map((local) => {
+                    const turno = obtenerTurnoLocal(local.id);
+                    const estaAbierto = turno?.estado === "ABIERTO";
+                    const estaCerrado = turno?.estado === "CERRADO";
 
-                <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 flex items-center justify-between">
-                    <div>
-                        <p className="text-gray-500 text-sm font-bold uppercase">
-                            Tickets Emitidos
-                        </p>
-                        <p className="text-3xl font-bold mt-1 text-blue-600">
-                            {stats.count}
-                        </p>
-                    </div>
-                    <div className="p-3 bg-blue-100 text-blue-600 rounded-full">
-                        <ShoppingBag size={24} />
-                    </div>
-                </div>
-            </div>
+                    return (
+                        <div
+                            key={local.id}
+                            className="bg-gray-800 rounded-2xl border border-gray-700 overflow-hidden shadow-xl flex flex-col"
+                        >
+                            {/* Cabecera de la Tarjeta */}
+                            <div
+                                className={`${local.color} p-4 flex justify-between items-center`}
+                            >
+                                <h3 className="font-bold text-xl">
+                                    {local.nombre}
+                                </h3>
+                                {estaAbierto ? (
+                                    <span className="bg-green-500/20 text-green-100 text-xs font-bold px-3 py-1 rounded-full border border-green-500/30 flex items-center gap-1">
+                                        <Clock size={12} /> ABIERTO
+                                    </span>
+                                ) : estaCerrado ? (
+                                    <span className="bg-red-500/20 text-red-100 text-xs font-bold px-3 py-1 rounded-full border border-red-500/30">
+                                        CERRADO
+                                    </span>
+                                ) : (
+                                    <span className="bg-gray-900/50 text-gray-300 text-xs font-bold px-3 py-1 rounded-full">
+                                        SIN ABRIR HOY
+                                    </span>
+                                )}
+                            </div>
 
-            {/* Tabla de Ventas */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-                <div className="p-6 border-b border-gray-100">
-                    <h2 className="font-bold text-lg flex items-center gap-2">
-                        <Calendar size={18} className="text-gray-400" /> Últimas
-                        Transacciones
-                    </h2>
-                </div>
-                <table className="w-full text-left">
-                    <thead className="bg-gray-50 text-gray-500 text-sm">
-                        <tr>
-                            <th className="p-4">ID</th>
-                            <th className="p-4">Hora</th>
-                            <th className="p-4">Pago</th>
-                            <th className="p-4 text-right">Total</th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100">
-                        {ventas.map((v) => (
-                            <tr key={v.id} className="hover:bg-gray-50">
-                                <td className="p-4 font-medium">#{v.id}</td>
-                                <td className="p-4 text-gray-500">
-                                    {new Date(v.created_at).toLocaleTimeString(
-                                        [],
-                                        { hour: "2-digit", minute: "2-digit" },
-                                    )}
-                                </td>
-                                <td className="p-4 capitalize">
-                                    {v.metodo_pago}
-                                </td>
-                                <td className="p-4 font-bold text-right">
-                                    ${v.total}
-                                </td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-                {ventas.length === 0 && (
-                    <div className="p-8 text-center text-gray-400">
-                        No hay ventas todavía.
-                    </div>
-                )}
+                            {/* Cuerpo de la Tarjeta (Datos Financieros) */}
+                            <div className="p-6 flex-1 flex flex-col justify-center">
+                                {!turno ? (
+                                    <div className="text-center text-gray-500">
+                                        <Store className="w-12 h-12 mx-auto mb-2 opacity-20" />
+                                        <p>
+                                            El empleado aún no abrió la caja
+                                            hoy.
+                                        </p>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-4">
+                                        <div>
+                                            <p className="text-gray-400 text-sm">
+                                                Fondo Inicial (Apertura)
+                                            </p>
+                                            <p className="text-xl font-bold text-gray-200">
+                                                $
+                                                {Number(
+                                                    turno.saldo_inicial,
+                                                ).toLocaleString()}
+                                            </p>
+                                        </div>
+
+                                        <div>
+                                            <p className="text-gray-400 text-sm">
+                                                Ventas Registradas
+                                            </p>
+                                            <p className="text-2xl font-bold text-green-400 flex items-center gap-1">
+                                                <DollarSign size={20} />
+                                                {Number(
+                                                    turno.efectivo_esperado,
+                                                ).toLocaleString()}
+                                            </p>
+                                        </div>
+
+                                        {/* Si ya hicieron el Cierre Z, mostramos el resultado */}
+                                        {estaCerrado && (
+                                            <div
+                                                className={`mt-4 p-3 rounded-lg border ${Number(turno.diferencia) === 0 ? "bg-green-500/10 border-green-500/30" : "bg-red-500/10 border-red-500/30"}`}
+                                            >
+                                                <p className="text-xs text-gray-400 uppercase font-bold mb-1">
+                                                    Resultado del Cierre Z
+                                                </p>
+                                                <div className="flex items-center gap-2">
+                                                    {Number(
+                                                        turno.diferencia,
+                                                    ) === 0 ? (
+                                                        <CheckCircle
+                                                            size={16}
+                                                            className="text-green-500"
+                                                        />
+                                                    ) : (
+                                                        <AlertTriangle
+                                                            size={16}
+                                                            className="text-red-500"
+                                                        />
+                                                    )}
+                                                    <span
+                                                        className={`font-bold ${Number(turno.diferencia) === 0 ? "text-green-400" : "text-red-400"}`}
+                                                    >
+                                                        {Number(
+                                                            turno.diferencia,
+                                                        ) === 0
+                                                            ? "Caja Cuadrada Exacta"
+                                                            : `Diferencia: $${Number(turno.diferencia).toLocaleString()}`}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    );
+                })}
             </div>
         </div>
     );
