@@ -1,4 +1,4 @@
-import { Routes, Route, BrowserRouter } from 'react-router-dom';
+import { Routes, Route } from 'react-router-dom';
 import Login from './pages/Auth/Login';
 import POS from './pages/POS/POS';
 import Dashboard from './pages/Admin/Dashboard';
