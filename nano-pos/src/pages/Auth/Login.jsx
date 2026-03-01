@@ -27,7 +27,7 @@ export default function Login() {
             // 2. Buscamos qué rol tiene este usuario en la base de datos
             const { data: perfil, error: perfilError } = await supabase
                 .from('profiles')
-                .select('rol')
+                .select('user_role')
                 .eq('id', authData.user.id)
                 .single();
 
@@ -36,7 +36,7 @@ export default function Login() {
             console.log('Usuario logueado como:', perfil?.rol);
 
             // 3. LA MAGIA DE RUTAS: Al admin al panel, al empleado a la caja
-            if (perfil?.rol === 'admin') {
+            if (perfil?.user_role === 'admin') {
                 navigate('/dashboard');
             } else {
                 navigate('/pos');

@@ -32,7 +32,7 @@ export default function Dashboard() {
                 // 2. Buscamos su rol en la tabla profiles
                 const { data: perfil, error: errorPerfil } = await supabase
                     .from('profiles')
-                    .select('rol')
+                    .select('user_role')
                     .eq('id', user.id)
                     .single();
 
@@ -40,7 +40,7 @@ export default function Dashboard() {
                 if (errorPerfil) throw errorPerfil;
 
                 // 3. LA BARRERA DE SEGURIDAD: Si no es admin, lo echamos al POS
-                if (perfil?.rol !== 'admin') {
+                if (perfil?.user_role !== 'admin') {
                     alert('⛔ Acceso denegado. Solo el administrador puede ver el Centro de Comando.');
                     navigate('/pos');
                     return;
