@@ -39,14 +39,14 @@ export default function Dashboard() {
                 // 2.B SOLUCIÓN ESLINT: Si hay error al buscar el perfil, lo atajamos acá
                 if (errorPerfil) throw errorPerfil;
 
-                // 3. LA BARRERA DE SEGURIDAD: Si no es dueño, lo echamos al POS
-                if (perfil?.rol !== 'dueño') {
+                // 3. LA BARRERA DE SEGURIDAD: Si no es admin, lo echamos al POS
+                if (perfil?.rol !== 'admin') {
                     alert('⛔ Acceso denegado. Solo el administrador puede ver el Centro de Comando.');
                     navigate('/pos');
                     return;
                 }
 
-                // Si es dueño, cargamos las cajas normalmente...
+                // Si es admin, cargamos las cajas normalmente...
                 const hoyInicio = new Date();
                 hoyInicio.setHours(0, 0, 0, 0);
 

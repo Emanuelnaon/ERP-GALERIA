@@ -276,7 +276,7 @@ export default function POS() {
                                 <LogOut size={16} />
                                 Salir
                             </button>
-                            {rolUsuario === 'dueño' && (
+                            {rolUsuario === 'admin' && (
                                 <button
                                     onClick={() => navigate('/dashboard')}
                                     className="flex items-center gap-2 px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg text-sm text-gray-300 transition-colors border border-gray-700">
