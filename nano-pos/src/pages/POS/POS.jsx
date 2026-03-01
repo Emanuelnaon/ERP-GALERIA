@@ -213,6 +213,16 @@ export default function POS() {
         );
     }
 
+const handleRelevo = async () => {
+    const confirm = window.confirm(
+        '¿Confirmas el relevo? Se cerrará tu sesión pero la caja permanecerá ABIERTA para el siguiente compañero.',
+    );
+    if (confirm) {
+        // Aquí podrías disparar un log en Supabase: "Usuario X entregó a las HH:MM"
+        await supabase.auth.signOut();
+        navigate('/login');
+    }
+};
     return (
         <div className="flex h-screen bg-gray-900 text-white overflow-hidden relative">
             {/* MODALES */}
@@ -221,6 +231,7 @@ export default function POS() {
                     <AperturaCajaModal
                         localId={localActualId}
                         usuarioId={usuarioActual?.id}
+                        rolUsuario={rolUsuario}
                         onCajaAbierta={(nuevoTurno) => setCajaAbierta(nuevoTurno)}
                     />
                 </div>
@@ -281,7 +292,11 @@ export default function POS() {
                                     </select>
                                 </div>
                             )}
-
+                            <button
+                                onClick={handleRelevo}
+                                className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 rounded-lg text-sm font-bold text-white transition-colors shadow-lg">
+                                Relevo de Personal
+                            </button>
                             <button
                                 onClick={() => setMostrarCierre(true)}
                                 className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg text-sm font-bold shadow-lg">
