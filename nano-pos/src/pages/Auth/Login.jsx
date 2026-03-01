@@ -3,6 +3,7 @@ import { supabase } from "../../services/supabase";
 import { useNavigate } from "react-router-dom";
 import { Lock, Mail, Loader2 } from "lucide-react";
 
+
 export default function Login() {
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
@@ -10,26 +11,44 @@ export default function Login() {
     const [errorMsg, setErrorMsg] = useState(null);
     const navigate = useNavigate();
 
-    const handleLogin = async (e) => {
-        e.preventDefault();
-        setLoading(true);
-        setErrorMsg(null);
+   const handleLogin = async (e) => {
+       e.preventDefault();
+       setLoading(true);
+       setErrorMsg(null);
 
-        // 1. Intentamos loguear con Supabase
-        const { data, error } = await supabase.auth.signInWithPassword({
-            email,
-            password,
-        });
+       try {
+           // 1. Intentamos loguear con Supabase
+           const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+               email,
+               password,
+           });
 
-        if (error) {
-            setErrorMsg("Credenciales incorrectas. Intenta de nuevo.");
-            setLoading(false);
-        } else {
-            console.log("Usuario logueado:", data.user);
-            // 2. Si es exitoso, nos vamos al POS (Cajero)
-            navigate("/pos");
-        }
-    };
+           if (authError) throw authError;
+
+           // 2. Buscamos qué rol tiene este usuario en la base de datos
+           const { data: perfil, error: perfilError } = await supabase
+               .from('profiles')
+               .select('rol')
+               .eq('id', authData.user.id)
+               .single();
+
+           if (perfilError) throw perfilError;
+
+           console.log('Usuario logueado como:', perfil?.rol);
+
+           // 3. LA MAGIA DE RUTAS: Al dueño al panel, al empleado a la caja
+           if (perfil?.rol === 'dueño') {
+               navigate('/dashboard');
+           } else {
+               navigate('/pos');
+           }
+       } catch (err) {
+           console.error('Error en login:', err);
+           setErrorMsg('Credenciales incorrectas. Intenta de nuevo.');
+       } finally {
+           setLoading(false);
+       }
+   };
 
     return (
         <div className="flex min-h-screen items-center justify-center bg-gray-950 px-4">
