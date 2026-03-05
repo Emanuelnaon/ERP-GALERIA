@@ -1,10 +1,12 @@
 import { Search, ShoppingCart, LayoutDashboard, LogOut, Store } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { supabase } from '../../services/supabase';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import AperturaCajaModal from '../../components/AperturaCajaModal';
 import CierreCajaModal from '../../components/CierreCajaModal';
 import GastoModal from '../../components/GastoModal';
+
+
 
 const LOCALES_GALERIA = [
     { id: 1, nombre: 'Zapatería' },
@@ -25,10 +27,12 @@ export default function POS() {
 
     const [mostrarCierre, setMostrarCierre] = useState(false);
     const [mostrarGasto, setMostrarGasto] = useState(false);
-
+    
     const [localActualId, setLocalActualId] = useState(null);
     const [rolUsuario, setRolUsuario] = useState('vendedor');
     const navigate = useNavigate();
+    const location = useLocation();
+
 
     const handleLogout = async () => {
         if (cajaAbierta && rolUsuario !== 'admin') {
@@ -62,15 +66,30 @@ export default function POS() {
                     const rol = perfil?.user_role || 'vendedor';
                     setRolUsuario(rol);
 
-                    // Si es admin empieza en el 1, pero puede cambiarlo. Si es vendedor, queda fijo.
-                    setLocalActualId(rol === 'admin' ? 1 : perfil?.local_id || 1);
+                    const localRequerido = location.state?.localDestino;
+                   const dispositivoBautizado = localStorage.getItem('nano_pos_device_local'); // Leemos la memoria
+
+                   if (rol === 'admin') {
+                       // El Admin es Dios: Si viene del Dashboard va a ese local, sino usa el de la PC, sino el 1.
+                       setLocalActualId(
+                           localRequerido
+                               ? Number(localRequerido)
+                               : dispositivoBautizado
+                                 ? Number(dispositivoBautizado)
+                                 : 1,
+                       );
+                   } else {
+                       // El Empleado es mortal: Queda encadenado al dispositivo físico donde está parado.
+                       // Si la máquina no está bautizada, usa su local de perfil por defecto.
+                       setLocalActualId(dispositivoBautizado ? Number(dispositivoBautizado) : perfil?.local_id || 1);
+                   }
                 }
             } catch (error) {
                 console.error('Error verificando usuario:', error);
             }
         };
         initUser();
-    }, []);
+    }, [location.state?.localDestino]);
 
     // 2. BUSCAR CAJA CADA VEZ QUE CAMBIA EL LOCAL
     useEffect(() => {

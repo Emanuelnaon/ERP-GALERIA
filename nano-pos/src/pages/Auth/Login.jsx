@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { supabase } from '../../services/supabase';
 import { useNavigate } from 'react-router-dom';
-import { Lock, Mail, Loader2 } from 'lucide-react';
+import { Lock, Mail, Loader2, LogIn, AlertCircle, Settings, MonitorSmartphone } from 'lucide-react';
 
 export default function Login() {
     const [email, setEmail] = useState('');
@@ -9,6 +9,30 @@ export default function Login() {
     const [loading, setLoading] = useState(false);
     const [errorMsg, setErrorMsg] = useState(null);
     const navigate = useNavigate();
+    // --- ESTADOS PARA EL BAUTISMO DE DISPOSITIVO ---
+    const [dispositivoLocalId, setDispositivoLocalId] = useState(localStorage.getItem('nano_pos_device_local') || null);
+
+    const handleConfigurarDispositivo = () => {
+        // 1. Pedimos el PIN maestro (Podés cambiar "1234" por la clave que quieras)
+        const pin = window.prompt('🔒 MODO ADMIN: Ingresá el PIN maestro para enlazar este dispositivo físico:');
+        if (pin !== '1234') {
+            if (pin !== null) alert('PIN incorrecto.');
+            return;
+        }
+
+        // 2. Si el PIN es correcto, elegimos qué local es esta tablet/PC
+        const opciones =
+            '1: Zapatería | 2: Ropa | 3: Librería | 4: Regalería\n\nIngresá el NÚMERO del local para este mostrador:';
+        const localElegido = window.prompt(opciones);
+
+        if (['1', '2', '3', '4'].includes(localElegido)) {
+            localStorage.setItem('nano_pos_device_local', localElegido);
+            setDispositivoLocalId(localElegido);
+            alert(`✅ Dispositivo enlazado exitosamente. Esta máquina ahora es la caja del Local ${localElegido}.`);
+        } else if (localElegido !== null) {
+            alert('❌ Opción inválida.');
+        }
+    };
 
     const handleLogin = async (e) => {
         e.preventDefault();
@@ -50,13 +74,32 @@ export default function Login() {
     };
 
     return (
-        <div className="flex min-h-screen items-center justify-center bg-gray-950 px-4">
+        <div className="flex min-h-screen items-center justify-center bg-gray-950 px-4 relative">
+            {/* 👇 Botón de configuración oculto a simple vista (Arriba a la derecha) */}
+            <button
+                type="button"
+                onClick={handleConfigurarDispositivo}
+                className="absolute top-6 right-6 text-gray-600 hover:text-gray-300 transition-colors"
+                title="Configurar Hardware">
+                <Settings size={28} />
+            </button>
+
             <div className="w-full max-w-sm space-y-8 bg-gray-900 p-8 rounded-2xl border border-gray-800 shadow-2xl">
                 {/* Encabezado */}
                 <div className="text-center">
                     <h1 className="text-3xl font-bold tracking-tight text-white">NANO POS</h1>
                     <p className="mt-2 text-sm text-gray-400">Ingresa tus credenciales de vendedor</p>
                 </div>
+
+                {/* 👇 INDICADOR VISUAL: Si la terminal está bautizada, lo mostramos */}
+                {dispositivoLocalId && (
+                    <div className="flex items-center justify-center gap-2 bg-indigo-900/30 text-indigo-400 p-3 rounded-xl border border-indigo-800/50">
+                        <MonitorSmartphone size={18} />
+                        <span className="text-sm font-medium">
+                            Terminal de <b>Local {dispositivoLocalId}</b>
+                        </span>
+                    </div>
+                )}
 
                 {/* Mensaje de Error */}
                 {errorMsg && (

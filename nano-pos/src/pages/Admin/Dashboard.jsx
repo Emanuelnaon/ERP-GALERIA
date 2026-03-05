@@ -14,6 +14,7 @@ const localesGaleria = [
 export default function Dashboard() {
     const [turnosHoy, setTurnosHoy] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [usuarioAdmin, setUsuarioAdmin] = useState(null);
     const navigate = useNavigate();
 
     useEffect(() => {
@@ -28,6 +29,7 @@ export default function Dashboard() {
                     navigate('/login');
                     return;
                 }
+                setUsuarioAdmin(user);
 
                 // 2. Buscamos su rol en la tabla profiles
                 const { data: perfil, error: errorPerfil } = await supabase
@@ -67,6 +69,79 @@ export default function Dashboard() {
 
         verificarAccesoYcargarDatos();
     }, [navigate]);
+
+    // --- NUEVA FUNCIÓN: CIERRE REMOTO (ADMIN) ---
+    const handleCierreRemoto = async (turno, nombreLocal) => {
+        // 1. Le pedimos al admin que ingrese cuánta plata hay
+        const input = window.prompt(
+            `🚨 CIERRE FORZOSO - ${nombreLocal}\n\nEl sistema espera: $${turno.efectivo_esperado}\n\nIngresá el monto EXACTO en efectivo físico que hay en la caja:`,
+        );
+
+        if (input === null) return; // Si toca "Cancelar", no hacemos nada.
+
+        const montoReal = parseFloat(input);
+        if (isNaN(montoReal) || montoReal < 0) {
+            alert('Monto inválido. Operación cancelada.');
+            return;
+        }
+
+        const diferenciaCalculada = montoReal - Number(turno.efectivo_esperado);
+
+        try {
+            // 2. Actualizamos la base de datos a la fuerza
+            const { error } = await supabase
+                .from('turnos_caja')
+                .update({
+                    estado: 'CERRADO',
+                    fecha_cierre: new Date().toISOString(),
+                    efectivo_declarado: montoReal,
+                    diferencia: diferenciaCalculada,
+                })
+                .eq('id', turno.id);
+
+            if (error) throw error;
+
+            alert('✅ Caja cerrada exitosamente de forma remota.');
+            window.location.reload(); // Recargamos la página para que el Dashboard se pinte de nuevo
+        } catch (error) {
+            console.error('Error en cierre remoto:', error);
+            alert('❌ Hubo un error al intentar cerrar la caja.');
+        }
+    };
+
+    // --- NUEVA FUNCIÓN: APERTURA DESDE EL DASHBOARD ---
+    const handleAperturaDesdeDashboard = async (local) => {
+        const input = window.prompt(
+            `💰 APERTURA DE CAJA - ${local.nombre}\n\nIngresá el fondo inicial (efectivo en caja):`,
+        );
+
+        if (input === null) return;
+
+        const monto = parseFloat(input);
+        if (isNaN(monto) || monto < 0) {
+            alert('Monto inválido. Operación cancelada.');
+            return;
+        }
+
+        try {
+            const { error } = await supabase.from('turnos_caja').insert([
+                {
+                    local_id: local.id,
+                    usuario_id: usuarioAdmin.id, // El admin que está logueado
+                    saldo_inicial: monto,
+                    estado: 'ABIERTO',
+                },
+            ]);
+
+            if (error) throw error;
+
+            alert(`✅ Caja de ${local.nombre} abierta con $${monto}.`);
+            window.location.reload(); // Recargamos para ver la tarjeta en verde
+        } catch (error) {
+            console.error('Error al abrir caja:', error);
+            alert('❌ Hubo un error al intentar abrir la caja.');
+        }
+    };
 
     // Función para encontrar el turno más reciente de un local específico
     const obtenerTurnoLocal = (localId) => {
@@ -115,18 +190,48 @@ export default function Dashboard() {
                             {/* Cabecera de la Tarjeta */}
                             <div className={`${local.color} p-4 flex justify-between items-center`}>
                                 <h3 className="font-bold text-xl">{local.nombre}</h3>
+
                                 {estaAbierto ? (
-                                    <span className="bg-green-500/20 text-green-100 text-xs font-bold px-3 py-1 rounded-full border border-green-500/30 flex items-center gap-1">
-                                        <Clock size={12} /> ABIERTO
-                                    </span>
+                                    <div className="flex items-center gap-2">
+                                        <span className="bg-green-500/20 text-green-100 text-xs font-bold px-3 py-1 rounded-full border border-green-500/30">
+                                            ABIERTO
+                                        </span>
+                                        {/* 👇 Botón para saltar directo a vender a ESTE local */}
+                                        <button
+                                            onClick={() => navigate('/pos', { state: { localDestino: local.id } })}
+                                            className="bg-green-600 hover:bg-green-700 text-white text-xs font-bold px-3 py-1 rounded-full shadow transition-colors">
+                                            Ir a Vender
+                                        </button>
+                                        <button
+                                            onClick={() => handleCierreRemoto(turno, local.nombre)}
+                                            className="bg-red-600 hover:bg-red-700 text-white text-xs font-bold px-3 py-1 rounded-full shadow transition-colors">
+                                            Forzar Cierre
+                                        </button>
+                                    </div>
                                 ) : estaCerrado ? (
-                                    <span className="bg-red-500/20 text-red-100 text-xs font-bold px-3 py-1 rounded-full border border-red-500/30">
-                                        CERRADO
-                                    </span>
+                                    <div className="flex items-center gap-2">
+                                        <span className="bg-red-500/20 text-red-100 text-xs font-bold px-3 py-1 rounded-full border border-red-500/30">
+                                            CERRADO
+                                        </span>
+                                        <button 
+                                            onClick={() => handleAperturaDesdeDashboard(local)}
+                                            className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-3 py-1 rounded-full shadow transition-colors"
+                                        >
+                                            Abrir Nueva Caja
+                                        </button>
+                                    </div>
                                 ) : (
-                                    <span className="bg-gray-900/50 text-gray-300 text-xs font-bold px-3 py-1 rounded-full">
-                                        SIN ABRIR HOY
-                                    </span>
+                                    <div className="flex items-center gap-2">
+                                        <span className="bg-gray-900/50 text-gray-300 text-xs font-bold px-3 py-1 rounded-full">
+                                            SIN ABRIR
+                                        </span>
+                                        {/* 👇 Botón para abrir la caja desde el Admin */}
+                                        <button
+                                            onClick={() => handleAperturaDesdeDashboard(local)}
+                                            className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-3 py-1 rounded-full shadow transition-colors">
+                                            Abrir Caja
+                                        </button>
+                                    </div>
                                 )}
                             </div>
 
