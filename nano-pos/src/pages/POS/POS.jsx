@@ -27,20 +27,19 @@ export default function POS() {
 
     const [mostrarCierre, setMostrarCierre] = useState(false);
     const [mostrarGasto, setMostrarGasto] = useState(false);
-    
+
     const [localActualId, setLocalActualId] = useState(null);
     const [rolUsuario, setRolUsuario] = useState('vendedor');
     const navigate = useNavigate();
     const location = useLocation();
 
-
     const handleLogout = async () => {
         if (cajaAbierta && rolUsuario !== 'admin') {
             alert(
-                '⛔ SEGURIDAD: Tu turno está en curso. Debes realizar el Cierre de Caja (botón rojo) y declarar el dinero antes de poder cerrar sesión.'
+                '⛔ SEGURIDAD: Tu turno está en curso. Debes realizar el Cierre de Caja (botón rojo) y declarar el dinero antes de poder cerrar sesión.',
             );
-        return; 
-    }
+            return;
+        }
 
         await supabase.auth.signOut();
         navigate('/login');
@@ -67,22 +66,22 @@ export default function POS() {
                     setRolUsuario(rol);
 
                     const localRequerido = location.state?.localDestino;
-                   const dispositivoBautizado = localStorage.getItem('nano_pos_device_local'); // Leemos la memoria
+                    const dispositivoBautizado = localStorage.getItem('nano_pos_device_local'); // Leemos la memoria
 
-                   if (rol === 'admin') {
-                       // El Admin es Dios: Si viene del Dashboard va a ese local, sino usa el de la PC, sino el 1.
-                       setLocalActualId(
-                           localRequerido
-                               ? Number(localRequerido)
-                               : dispositivoBautizado
-                                 ? Number(dispositivoBautizado)
-                                 : 1,
-                       );
-                   } else {
-                       // El Empleado es mortal: Queda encadenado al dispositivo físico donde está parado.
-                       // Si la máquina no está bautizada, usa su local de perfil por defecto.
-                       setLocalActualId(dispositivoBautizado ? Number(dispositivoBautizado) : perfil?.local_id || 1);
-                   }
+                    if (rol === 'admin') {
+                        // El Admin es Dios: Si viene del Dashboard va a ese local, sino usa el de la PC, sino el 1.
+                        setLocalActualId(
+                            localRequerido
+                                ? Number(localRequerido)
+                                : dispositivoBautizado
+                                  ? Number(dispositivoBautizado)
+                                  : 1,
+                        );
+                    } else {
+                        // El Empleado es mortal: Queda encadenado al dispositivo físico donde está parado.
+                        // Si la máquina no está bautizada, usa su local de perfil por defecto.
+                        setLocalActualId(dispositivoBautizado ? Number(dispositivoBautizado) : perfil?.local_id || 1);
+                    }
                 }
             } catch (error) {
                 console.error('Error verificando usuario:', error);
@@ -124,7 +123,10 @@ export default function POS() {
 
         const { data, error } = await supabase
             .from('variantes')
-            .select(`id, codigo_barras, stock_actual, talle, precio:productos(precio_base, nombre)`)
+            // 1. 👇 Agregamos "!inner" a productos. Es OBLIGATORIO en Supabase para poder filtrar por una tabla conectada.
+            .select(`id, codigo_barras, stock_actual, talle, precio:productos!inner(precio_base, nombre)`)
+            // 2. 👇 EL MURO DE SEGURIDAD: Exigimos que el producto pertenezca al local actual
+            .eq('productos.local_id', localActualId)
             .ilike('productos.nombre', `%${term}%`)
             .limit(10);
 
@@ -140,6 +142,8 @@ export default function POS() {
                 }))
                 .filter((item) => item.nombre !== 'DESCONOCIDO');
             setProducts(formatted);
+        } else {
+            console.error('Error buscando productos:', error);
         }
         setLoading(false);
     };
@@ -232,16 +236,16 @@ export default function POS() {
         );
     }
 
-const handleRelevo = async () => {
-    const confirm = window.confirm(
-        '¿Confirmas el relevo? Se cerrará tu sesión pero la caja permanecerá ABIERTA para el siguiente compañero.',
-    );
-    if (confirm) {
-        // Aquí podrías disparar un log en Supabase: "Usuario X entregó a las HH:MM"
-        await supabase.auth.signOut();
-        navigate('/login');
-    }
-};
+    const handleRelevo = async () => {
+        const confirm = window.confirm(
+            '¿Confirmas el relevo? Se cerrará tu sesión pero la caja permanecerá ABIERTA para el siguiente compañero.',
+        );
+        if (confirm) {
+            // Aquí podrías disparar un log en Supabase: "Usuario X entregó a las HH:MM"
+            await supabase.auth.signOut();
+            navigate('/login');
+        }
+    };
     return (
         <div className="flex h-screen bg-gray-900 text-white overflow-hidden relative">
             {/* MODALES */}
