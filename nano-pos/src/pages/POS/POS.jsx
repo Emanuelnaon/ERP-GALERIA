@@ -35,15 +35,20 @@ export default function POS() {
     const location = useLocation();
 
     const handleLogout = async () => {
-        if (cajaAbierta && rolUsuario !== 'admin') {
-            alert(
-                '⛔ SEGURIDAD: Tu turno está en curso. Debes realizar el Cierre de Caja (botón rojo) y declarar el dinero antes de poder cerrar sesión.',
+        // EL CANDADO: Si hay caja abierta, frenamos la salida
+        if (cajaAbierta) {
+            const confirmarRelevo = window.confirm(
+                '⚠️ ALERTA: Tenés la caja ABIERTA con dinero sin declarar.\n\n' +
+                    '¿Estás dejando la sesión para que ingrese un RELEVO?\n' +
+                    "- Si tu turno terminó, tocá 'Cancelar' y hacé el Cierre de Caja.\n" +
+                    "- Si es un relevo, tocá 'Aceptar' para salir.",
             );
-            return;
+
+            if (!confirmarRelevo) return; // Si toca cancelar, lo dejamos en el POS
         }
 
+        // Si no hay caja abierta, o si confirmó el relevo, cerramos sesión
         await supabase.auth.signOut();
-        navigate('/login');
     };
 
     // 1. OBTENER USUARIO Y ROL
@@ -149,12 +154,56 @@ export default function POS() {
         setLoading(false);
     };
 
+    // --- LECTOR DE CÓDIGO DE BARRAS ---
+    const handleEscanearCodigo = async (codigo) => {
+        if (!codigo) return;
+        setLoading(true);
+
+        const { data, error } = await supabase
+            .from('variantes')
+            .select(`id, codigo_barras, stock_actual, talle, precio:productos!inner(precio_base, nombre)`)
+            .eq('productos.local_id', localActualId)
+            .eq('codigo_barras', codigo) // Buscamos coincidencia EXACTA
+            .single(); // Traemos solo uno
+
+        // 👇 AHORA USAMOS LA VARIABLE "ERROR" PARA CAPTURAR FALLOS
+        if (error || !data) {
+            console.warn('Código no encontrado:', error?.message);
+            alert(`❌ El código ${codigo} no existe en tu inventario.`);
+            setSearchTerm('');
+            setLoading(false);
+            return; // Cortamos la función acá
+        }
+
+        // Si llegó acá, es porque encontró el producto
+        const productoEscaneado = {
+            id: data.id,
+            nombre: data.precio.nombre,
+            precio: data.precio.precio_base,
+            talle: data.talle,
+            stock: data.stock_actual,
+            codigo: data.codigo_barras,
+        };
+
+        addToCart(productoEscaneado); // Lo mandamos directo al carrito
+        setSearchTerm(''); // Limpiamos el buscador
+        setLoading(false);
+    };
+
+    // --- DETECTOR DE LA TECLA ENTER (Pistola Láser) ---
+    const handleKeyDown = (e) => {
+        if (e.key === 'Enter' && searchTerm.trim() !== '') {
+            handleEscanearCodigo(searchTerm.trim());
+        }
+    };
+
     useEffect(() => {
         const timeout = setTimeout(() => {
             if (searchTerm.trim().length > 0) searchProducts(searchTerm);
             else setProducts([]);
         }, 300);
         return () => clearTimeout(timeout);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [searchTerm]);
 
     // --- CARRITO Y COBRO ---
@@ -373,9 +422,12 @@ export default function POS() {
                         autoFocus
                         type="text"
                         placeholder="Escribe o escanea código..."
-                        className="w-full p-4 bg-gray-800 rounded-xl text-lg border border-gray-700 focus:border-blue-500 focus:outline-none mb-6"
                         value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
+                        onChange={(e) => {
+                            setSearchTerm(e.target.value);
+                        }}
+                        onKeyDown={handleKeyDown}
+                        className="w-full p-4 bg-gray-800 rounded-xl text-lg text-white font-bold border border-gray-700 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/50 focus:outline-none mb-6 transition-all"
                     />
 
                     {/* PRODUCTOS */}
