@@ -5,7 +5,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import AperturaCajaModal from '../../components/AperturaCajaModal';
 import CierreCajaModal from '../../components/CierreCajaModal';
 import GastoModal from '../../components/GastoModal';
-
+import TicketVentaModal from '../../components/TicketVentaModal';
 
 
 const LOCALES_GALERIA = [
@@ -20,6 +20,7 @@ export default function POS() {
     const [products, setProducts] = useState([]);
     const [cart, setCart] = useState([]);
     const [loading, setLoading] = useState(false);
+    const [ticketData, setTicketData] = useState(null);
 
     const [cajaAbierta, setCajaAbierta] = useState(null);
     const [verificandoCaja, setVerificandoCaja] = useState(true);
@@ -160,6 +161,16 @@ export default function POS() {
     const addToCart = (product) => {
         setCart((currentCart) => {
             const exists = currentCart.find((item) => item.id === product.id);
+            const cantidadActual = exists ? exists.cantidad : 0;
+
+            // 🛑 EL MURO DE SEGURIDAD DEL STOCK
+            if (cantidadActual + 1 > product.stock) {
+                alert(
+                    `⚠️ Stock insuficiente. Solo tenés ${product.stock} unidades de "${product.nombre}" en tu local.`,
+                );
+                return currentCart; // Devolvemos el carrito intacto, no lo dejamos sumar
+            }
+
             if (exists) {
                 return currentCart.map((item) =>
                     item.id === product.id ? { ...item, cantidad: item.cantidad + 1 } : item,
@@ -193,10 +204,19 @@ export default function POS() {
                 p_detalles: cart,
             };
 
-            const { data, error } = await supabase.rpc('procesar_venta', ventaData);
+            const { data: numeroVenta, error } = await supabase.rpc('procesar_venta', ventaData);
             if (error) throw error;
 
-            alert(`✅ Venta #${data} registrada con éxito!`);
+            const localObj = LOCALES_GALERIA.find((l) => l.id === localActualId);
+
+            setTicketData({
+                cart: [...cart], // Hacemos una copia del carrito
+                total: total,
+                numVenta: numeroVenta,
+                localNombre: localObj ? localObj.nombre : 'Local Comercial',
+                vendedorEmail: usuarioActual.email,
+            });
+
             setCajaAbierta((prev) => ({
                 ...prev,
                 efectivo_esperado: Number(prev.efectivo_esperado) + total,
@@ -247,7 +267,7 @@ export default function POS() {
         }
     };
     return (
-        <div className="flex h-screen bg-gray-900 text-white overflow-hidden relative">
+        <div className="flex h-screen bg-gray-900 text-white overflow-hidden relative print:bg-white print:h-auto print:overflow-visible">
             {/* MODALES */}
             {!cajaAbierta && (
                 <div className="absolute inset-0 z-50">
@@ -290,7 +310,7 @@ export default function POS() {
             )}
 
             <div
-                className={`flex flex-col lg:flex-row w-full h-full ${!cajaAbierta || mostrarCierre ? 'blur-md pointer-events-none' : ''}`}>
+                className={`flex flex-col lg:flex-row w-full h-full print:hidden ${!cajaAbierta || mostrarCierre ? 'blur-md pointer-events-none' : ''}`}>
                 <div className="w-full lg:w-[70%] xl:w-[75%] p-4 lg:p-6 flex flex-col border-b lg:border-b-0 lg:border-r border-gray-800 h-[60vh] lg:h-full">
                     {/* ENCABEZADO Y CONTROLES */}
                     <div className="flex justify-between items-center mb-6">
@@ -423,6 +443,17 @@ export default function POS() {
                     </div>
                 </div>
             </div>
+            {/* MODAL DE TICKET DE VENTA (Se muestra al cobrar) */}
+            {ticketData && (
+                <TicketVentaModal
+                    cart={ticketData.cart}
+                    total={ticketData.total}
+                    numVenta={ticketData.numVenta}
+                    localNombre={ticketData.localNombre}
+                    vendedorEmail={ticketData.vendedorEmail}
+                    onClose={() => setTicketData(null)}
+                />
+            )}
         </div>
     );
 }
