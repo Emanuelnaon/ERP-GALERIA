@@ -55,27 +55,31 @@ export default function POS() {
     useEffect(() => {
         const initUser = async () => {
             setVerificandoCaja(true);
+            let rolLocal = 'vendedor'; // Creamos una variable auxiliar
+
             try {
                 const {
                     data: { user },
                 } = await supabase.auth.getUser();
-                setUsuarioActual(user);
 
                 if (user) {
                     const { data: perfil } = await supabase
                         .from('profiles')
-                        .select('user_role, local_id')
+                        .select('user_role, local_id, dni')
                         .eq('id', user.id)
                         .single();
 
-                    const rol = perfil?.user_role || 'vendedor';
-                    setRolUsuario(rol);
+                    rolLocal = perfil?.user_role || 'vendedor'; // Guardamos acá
+                    setRolUsuario(rolLocal); // Actualizamos el estado para la UI
+
+                    const identificadorCajero = perfil?.dni || user.email.split('@')[0];
+                    user.identificador = identificadorCajero;
+                    setUsuarioActual(user);
 
                     const localRequerido = location.state?.localDestino;
-                    const dispositivoBautizado = localStorage.getItem('nano_pos_device_local'); // Leemos la memoria
+                    const dispositivoBautizado = localStorage.getItem('nano_pos_device_local');
 
-                    if (rol === 'admin') {
-                        // El Admin es Dios: Si viene del Dashboard va a ese local, sino usa el de la PC, sino el 1.
+                    if (rolLocal === 'admin') {
                         setLocalActualId(
                             localRequerido
                                 ? Number(localRequerido)
@@ -84,17 +88,26 @@ export default function POS() {
                                   : 1,
                         );
                     } else {
-                        // El Empleado es mortal: Queda encadenado al dispositivo físico donde está parado.
-                        // Si la máquina no está bautizada, usa su local de perfil por defecto.
-                        setLocalActualId(dispositivoBautizado ? Number(dispositivoBautizado) : perfil?.local_id || 1);
+                        if (!dispositivoBautizado) {
+                            alert('⚠️ ACCESO DENEGADO: Esta computadora no está asignada a ningún local.');
+                            await supabase.auth.signOut();
+                            navigate('/login');
+                            return;
+                        }
+                        setLocalActualId(Number(dispositivoBautizado));
                     }
                 }
             } catch (error) {
                 console.error('Error verificando usuario:', error);
+            } finally {
+                // 👇 Usamos la variable local, NO el estado, así no hace falta en el array
+                if (localStorage.getItem('nano_pos_device_local') || rolLocal === 'admin') {
+                    setVerificandoCaja(false);
+                }
             }
         };
         initUser();
-    }, [location.state?.localDestino]);
+    }, [location.state?.localDestino, navigate]); // 👈 El array queda limpio y seguro
 
     // 2. BUSCAR CAJA CADA VEZ QUE CAMBIA EL LOCAL
     useEffect(() => {
@@ -263,7 +276,7 @@ export default function POS() {
                 total: total,
                 numVenta: numeroVenta,
                 localNombre: localObj ? localObj.nombre : 'Local Comercial',
-                vendedorEmail: usuarioActual.email,
+                vendedorEmail: usuarioActual.identificador || usuarioActual.email.split('@')[0],
             });
 
             setCajaAbierta((prev) => ({
