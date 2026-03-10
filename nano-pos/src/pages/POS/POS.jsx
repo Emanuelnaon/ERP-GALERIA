@@ -1,4 +1,4 @@
-import { Search, ShoppingCart, LayoutDashboard, LogOut, Store } from 'lucide-react';
+import { Search, ShoppingCart, LayoutDashboard, LogOut, Store, Trash2, Minus, Plus} from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { supabase } from '../../services/supabase';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -33,6 +33,10 @@ export default function POS() {
     const [rolUsuario, setRolUsuario] = useState('vendedor');
     const navigate = useNavigate();
     const location = useLocation();
+
+    const [vistaActiva, setVistaActiva] = useState('catalogo'); // Controla qué pestaña vemos
+    const [ventasTurno, setVentasTurno] = useState([]); // Guarda el historial de ventas
+    const [cargandoVentas, setCargandoVentas] = useState(false);
 
     const handleLogout = async () => {
         // EL CANDADO: Si hay caja abierta, frenamos la salida
@@ -135,6 +139,30 @@ export default function POS() {
         fetchCaja();
     }, [localActualId]);
 
+    // --- HISTORIAL DE VENTAS DEL TURNO ---
+    useEffect(() => {
+        const fetchVentasTurno = async () => {
+            if (vistaActiva !== 'historial' || !cajaAbierta) return;
+            setCargandoVentas(true);
+            try {
+                const { data, error } = await supabase
+                    .from('ventas') // Asegurate de que tu tabla se llame así
+                    .select('*')
+                    .eq('turno_id', cajaAbierta.id)
+                    .order('created_at', { ascending: false });
+
+                if (error) throw error;
+                setVentasTurno(data || []);
+            } catch (error) {
+                console.error('Error buscando ventas:', error);
+            } finally {
+                setCargandoVentas(false);
+            }
+        };
+
+        fetchVentasTurno();
+    }, [vistaActiva, cajaAbierta]);
+
     // --- BUSCADOR ---
     const searchProducts = async (term) => {
         if (!term) return setProducts([]);
@@ -230,7 +258,7 @@ export default function POS() {
                 alert(
                     `⚠️ Stock insuficiente. Solo tenés ${product.stock} unidades de "${product.nombre}" en tu local.`,
                 );
-                return currentCart; // Devolvemos el carrito intacto, no lo dejamos sumar
+                return currentCart;
             }
 
             if (exists) {
@@ -240,6 +268,32 @@ export default function POS() {
             }
             return [...currentCart, { ...product, cantidad: 1 }];
         });
+    };
+
+    // --- CONTROL DE CANTIDADES Y ELIMINAR ÍTEMS ---
+    const updateQuantity = (productId, change, maxStock) => {
+        setCart((currentCart) => {
+            return currentCart
+                .map((item) => {
+                    if (item.id === productId) {
+                        const nuevaCantidad = item.cantidad + change;
+                        // Muro de seguridad del stock
+                        if (change > 0 && nuevaCantidad > maxStock) {
+                            alert(`⚠️ Stock insuficiente. Solo tenés ${maxStock} unidades.`);
+                            return item;
+                        }
+                        if (nuevaCantidad <= 0) return { ...item, cantidad: 0 };
+
+                        return { ...item, cantidad: nuevaCantidad };
+                    }
+                    return item;
+                })
+                .filter((item) => item.cantidad > 0);
+        });
+    };
+
+    const removeFromCart = (productId) => {
+        setCart((currentCart) => currentCart.filter((item) => item.id !== productId));
     };
 
     const total = cart.reduce((acc, item) => acc + item.precio * item.cantidad, 0);
@@ -283,6 +337,14 @@ export default function POS() {
                 ...prev,
                 efectivo_esperado: Number(prev.efectivo_esperado) + total,
             }));
+
+            const nuevaVentaLocal = {
+                id: numeroVenta,
+                created_at: new Date().toISOString(),
+                metodo_pago: 'efectivo',
+                total: total,
+            };
+            setVentasTurno((prev) => [nuevaVentaLocal, ...prev]);
 
             setCart([]);
             setSearchTerm('');
@@ -376,9 +438,27 @@ export default function POS() {
                 <div className="w-full lg:w-[70%] xl:w-[75%] p-4 lg:p-6 flex flex-col border-b lg:border-b-0 lg:border-r border-gray-800 h-[60vh] lg:h-full">
                     {/* ENCABEZADO Y CONTROLES */}
                     <div className="flex justify-between items-center mb-6">
-                        <h2 className="text-2xl font-bold flex items-center gap-2">
-                            <Search className="text-blue-500" /> Catálogo
-                        </h2>
+                        {/* 👇 EL NUEVO SWITCH DE PESTAÑAS 👇 */}
+                        <div className="flex bg-gray-950 p-1 rounded-lg border border-gray-800 shadow-inner">
+                            <button
+                                onClick={() => setVistaActiva('catalogo')}
+                                className={`px-6 py-2 rounded-md font-bold transition-all ${
+                                    vistaActiva === 'catalogo'
+                                        ? 'bg-blue-600 text-white shadow-md'
+                                        : 'text-gray-400 hover:text-white'
+                                }`}>
+                                Catálogo
+                            </button>
+                            <button
+                                onClick={() => setVistaActiva('historial')}
+                                className={`px-6 py-2 rounded-md font-bold transition-all ${
+                                    vistaActiva === 'historial'
+                                        ? 'bg-blue-600 text-white shadow-md'
+                                        : 'text-gray-400 hover:text-white'
+                                }`}>
+                                Mis Ventas
+                            </button>
+                        </div>
 
                         <div className="flex gap-3 items-center">
                             {/* SELECTOR DE LOCAL (Solo para Admin) */}
@@ -430,44 +510,78 @@ export default function POS() {
                         </div>
                     </div>
 
-                    {/* BUSCADOR */}
-                    <input
-                        autoFocus
-                        type="text"
-                        placeholder="Escribe o escanea código..."
-                        value={searchTerm}
-                        onChange={(e) => {
-                            setSearchTerm(e.target.value);
-                        }}
-                        onKeyDown={handleKeyDown}
-                        className="w-full p-4 bg-gray-800 rounded-xl text-lg text-white font-bold border border-gray-700 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/50 focus:outline-none mb-6 transition-all"
-                    />
+                    {/* 👇 BUSCADOR (Oculto en historial) */}
+                    {vistaActiva === 'catalogo' && (
+                        <input
+                            autoFocus
+                            type="text"
+                            placeholder="Escribe o escanea código..."
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            onKeyDown={handleKeyDown}
+                            className="w-full p-4 bg-gray-800 rounded-xl text-lg text-white font-bold border border-gray-700 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/50 focus:outline-none mb-6 transition-all"
+                        />
+                    )}
 
-                    {/* PRODUCTOS */}
-                    <div className="flex-1 overflow-y-auto grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 content-start pr-2">
-                        {products.map((p) => (
-                            <div
-                                key={p.id}
-                                onClick={() => addToCart(p)}
-                                className="bg-gray-800 p-4 rounded-lg border border-gray-700 hover:border-blue-500 cursor-pointer active:scale-95 transition-all">
-                                <h3 className="font-bold text-lg">{p.nombre}</h3>
-                                <div className="flex justify-between mt-2 text-gray-400">
-                                    <span>{p.talle ? `Talle: ${p.talle}` : 'Unitario'}</span>
-                                    <span className={p.stock < 2 ? 'text-red-500' : 'text-green-500'}>
-                                        Stock: {p.stock}
-                                    </span>
+                    {/* 👇 ÁREA DINÁMICA: PRODUCTOS O HISTORIAL 👇 */}
+                    {vistaActiva === 'catalogo' ? (
+                        <div className="flex-1 overflow-y-auto grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 content-start pr-2">
+                            {products.map((p) => (
+                                <div
+                                    key={p.id}
+                                    onClick={() => addToCart(p)}
+                                    className="bg-gray-800 p-4 rounded-lg border border-gray-700 hover:border-blue-500 cursor-pointer active:scale-95 transition-all">
+                                    <h3 className="font-bold text-lg">{p.nombre}</h3>
+                                    <div className="flex justify-between mt-2 text-gray-400">
+                                        <span>{p.talle ? `Talle: ${p.talle}` : 'Unitario'}</span>
+                                        <span className={p.stock < 2 ? 'text-red-500' : 'text-green-500'}>
+                                            Stock: {p.stock}
+                                        </span>
+                                    </div>
+                                    <div className="mt-3 text-2xl font-bold text-blue-400">${p.precio}</div>
                                 </div>
-                                <div className="mt-3 text-2xl font-bold text-blue-400">${p.precio}</div>
-                            </div>
-                        ))}
-                        {products.length === 0 && !loading && searchTerm && (
-                            <p className="text-gray-500 col-span-full text-center mt-10">
-                                No se encontraron productos.
-                            </p>
-                        )}
-                    </div>
+                            ))}
+                            {products.length === 0 && !loading && searchTerm && (
+                                <p className="text-gray-500 col-span-full text-center mt-10">
+                                    No se encontraron productos.
+                                </p>
+                            )}
+                        </div>
+                    ) : (
+                        <div className="flex-1 overflow-y-auto bg-gray-900 rounded-xl border border-gray-800 p-4 pr-2">
+                            <h3 className="text-xl font-bold mb-4 text-gray-300">Ventas de este turno</h3>
+                            {cargandoVentas ? (
+                                <p className="text-center text-gray-500 mt-10">Cargando historial...</p>
+                            ) : ventasTurno.length === 0 ? (
+                                <p className="text-gray-500 text-center mt-10">
+                                    Aún no registraste ventas en este turno.
+                                </p>
+                            ) : (
+                                <div className="space-y-3">
+                                    {ventasTurno.map((v) => (
+                                        <div
+                                            key={v.id}
+                                            className="flex justify-between items-center p-4 bg-gray-800 rounded-lg border border-gray-700 hover:border-gray-500 transition-colors">
+                                            <div>
+                                                <p className="font-bold text-lg text-white">Ticket #{v.id}</p>
+                                                <p className="text-sm text-gray-400">
+                                                    {new Date(v.created_at).toLocaleTimeString()} hs |{' '}
+                                                    {v.metodo_pago?.toUpperCase() || 'EFECTIVO'}
+                                                </p>
+                                            </div>
+                                            <div className="text-right">
+                                                <p className="font-bold text-2xl text-green-400">
+                                                    ${Number(v.total).toLocaleString()}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    )}
                 </div>
-
+                
                 {/* TICKET */}
                 <div className="w-full lg:w-[30%] xl:w-[25%] bg-gray-950 p-4 lg:p-6 flex flex-col shadow-2xl h-[40vh] lg:h-full">
                     <h2 className="text-2xl font-bold mb-6 flex items-center gap-2">
@@ -477,14 +591,42 @@ export default function POS() {
                         {cart.map((item) => (
                             <div
                                 key={item.id}
-                                className="flex justify-between items-center bg-gray-900 p-3 rounded border border-gray-800">
-                                <div>
-                                    <div className="font-bold">{item.nombre}</div>
-                                    <div className="text-sm text-gray-400">
-                                        ${item.precio} x {item.cantidad}
+                                className="flex flex-col gap-2 bg-gray-900 p-3 rounded border border-gray-800">
+                                <div className="flex justify-between items-start">
+                                    <div>
+                                        <div className="font-bold">{item.nombre}</div>
+                                        <div className="text-sm text-gray-400">
+                                            ${item.precio} x {item.cantidad}
+                                        </div>
+                                    </div>
+                                    <div className="font-bold text-xl text-blue-400">
+                                        ${item.precio * item.cantidad}
                                     </div>
                                 </div>
-                                <div className="font-bold text-xl">${item.precio * item.cantidad}</div>
+
+                                {/* Controles de cantidad y Eliminar */}
+                                <div className="flex justify-between items-center mt-2 border-t border-gray-800 pt-2">
+                                    <div className="flex items-center gap-3 bg-gray-950 rounded-lg p-1 border border-gray-700">
+                                        <button
+                                            onClick={() => updateQuantity(item.id, -1, item.stock)}
+                                            className="p-1 hover:bg-gray-800 rounded text-gray-400 hover:text-white transition-colors">
+                                            <Minus size={16} />
+                                        </button>
+                                        <span className="font-bold w-6 text-center">{item.cantidad}</span>
+                                        <button
+                                            onClick={() => updateQuantity(item.id, 1, item.stock)}
+                                            className="p-1 hover:bg-gray-800 rounded text-gray-400 hover:text-white transition-colors">
+                                            <Plus size={16} />
+                                        </button>
+                                    </div>
+
+                                    <button
+                                        onClick={() => removeFromCart(item.id)}
+                                        className="text-red-500 hover:text-red-400 p-2 hover:bg-red-500/10 rounded-lg transition-colors"
+                                        title="Eliminar producto">
+                                        <Trash2 size={18} />
+                                    </button>
+                                </div>
                             </div>
                         ))}
                         {cart.length === 0 && (
