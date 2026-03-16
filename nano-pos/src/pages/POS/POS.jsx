@@ -7,7 +7,6 @@ import CierreCajaModal from '../../components/CierreCajaModal';
 import GastoModal from '../../components/GastoModal';
 import TicketVentaModal from '../../components/TicketVentaModal';
 
-
 const LOCALES_GALERIA = [
     { id: 1, nombre: 'Zapatería' },
     { id: 2, nombre: 'Ropa' },
@@ -27,7 +26,7 @@ const playErrorSound = () => {
 
         oscillator.type = 'sawtooth'; // Tipo de onda áspera para que suene a error
         oscillator.frequency.setValueAtTime(150, audioCtx.currentTime); // Frecuencia grave
-        
+
         // Efecto de caída de volumen rápida
         gainNode.gain.setValueAtTime(0.5, audioCtx.currentTime);
         gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
@@ -35,7 +34,7 @@ const playErrorSound = () => {
         oscillator.start(audioCtx.currentTime);
         oscillator.stop(audioCtx.currentTime + 0.3);
     } catch (e) {
-        console.error("El navegador no soporta Web Audio API", e);
+        console.error('El navegador no soporta Web Audio API', e);
     }
 };
 
@@ -151,7 +150,7 @@ export default function POS() {
             setVerificandoCaja(true);
             try {
                 const { data, error } = await supabase
-                    .from('caja')
+                    .from('turnos_caja')
                     .select('*')
                     .eq('local_id', localActualId)
                     .eq('estado', 'ABIERTO')
