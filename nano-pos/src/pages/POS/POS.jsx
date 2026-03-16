@@ -429,6 +429,7 @@ export default function POS() {
         };
         window.addEventListener('keydown', manejarTeclas);
         return () => window.removeEventListener('keydown', manejarTeclas);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [cart, loading, cajaAbierta, mostrarCierre, mostrarCobro]);
 
     if (verificandoCaja) {

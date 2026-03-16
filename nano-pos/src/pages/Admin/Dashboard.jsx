@@ -124,7 +124,7 @@ export default function Dashboard() {
         }
 
         try {
-            const { error } = await supabase.from('turnos_caja').insert([
+            const { error } = await supabase.from('caja').insert([
                 {
                     local_id: local.id,
                     usuario_id: usuarioAdmin.id, // El admin que está logueado
