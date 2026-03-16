@@ -197,17 +197,33 @@ export default function POS() {
         if (!term) return setProducts([]);
         setLoading(true);
 
-        const { data, error } = await supabase
+        // 1. Petición A: Busca SOLO por nombre
+        const fetchPorNombre = supabase
             .from('variantes')
-            // 1. 👇 Agregamos "!inner" a productos. Es OBLIGATORIO en Supabase para poder filtrar por una tabla conectada.
             .select(`id, codigo_barras, stock_actual, talle, precio:productos!inner(precio_base, nombre)`)
-            // 2. 👇 EL MURO DE SEGURIDAD: Exigimos que el producto pertenezca al local actual
             .eq('productos.local_id', localActualId)
             .ilike('productos.nombre', `%${term}%`)
             .limit(10);
 
-        if (!error) {
-            const formatted = data
+        // 2. Petición B: Busca SOLO por código de barras
+        const fetchPorCodigo = supabase
+            .from('variantes')
+            .select(`id, codigo_barras, stock_actual, talle, precio:productos!inner(precio_base, nombre)`)
+            .eq('productos.local_id', localActualId)
+            .ilike('codigo_barras', `%${term}%`)
+            .limit(10);
+
+        // Las disparamos a las dos a la vez de forma independiente
+        const [resNombre, resCodigo] = await Promise.all([fetchPorNombre, fetchPorCodigo]);
+
+        if (!resNombre.error && !resCodigo.error) {
+            // Juntamos los resultados
+            const combinados = [...resNombre.data, ...resCodigo.data];
+
+            // Limpiamos los repetidos por si un producto saltó en ambas listas
+            const unicos = Array.from(new Map(combinados.map((item) => [item.id, item])).values());
+
+            const formatted = unicos
                 .map((item) => ({
                     id: item.id,
                     nombre: item.precio?.nombre || 'DESCONOCIDO',
@@ -217,9 +233,10 @@ export default function POS() {
                     codigo: item.codigo_barras,
                 }))
                 .filter((item) => item.nombre !== 'DESCONOCIDO');
+
             setProducts(formatted);
         } else {
-            console.error('Error buscando productos:', error);
+            console.error('Error buscando productos:', resNombre.error || resCodigo.error);
         }
         setLoading(false);
     };
