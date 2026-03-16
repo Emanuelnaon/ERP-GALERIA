@@ -151,7 +151,7 @@ export default function POS() {
             setVerificandoCaja(true);
             try {
                 const { data, error } = await supabase
-                    .from('turnos_caja')
+                    .from('caja')
                     .select('*')
                     .eq('local_id', localActualId)
                     .eq('estado', 'ABIERTO')
