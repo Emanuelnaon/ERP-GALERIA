@@ -337,8 +337,6 @@ export default function POS() {
         setCart((currentCart) => currentCart.filter((item) => item.id !== productId));
     };
 
-    const total = cart.reduce((acc, item) => acc + item.precio * item.cantidad, 0);
-
     // --- LÓGICA DE COBRO ---
     const total = cart.reduce((acc, item) => acc + item.precio * item.cantidad, 0);
 
@@ -486,6 +484,97 @@ export default function POS() {
                             if (rolUsuario === 'admin') navigate('/dashboard');
                         }}
                     />
+                </div>
+            )}
+
+            {/* 👇 MODAL DE COBRO F10 👇 */}
+            {mostrarCobro && (
+                <div className="absolute inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+                    <div className="bg-gray-900 border-2 border-blue-500 rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in duration-200">
+                        <div className="bg-blue-600 p-6 text-center">
+                            <h2 className="text-3xl font-bold text-white mb-1">Confirmar Venta</h2>
+                            <p className="text-blue-100 font-medium">Ticket por {cart.length} artículos</p>
+                        </div>
+
+                        <form onSubmit={confirmarVentaFinal} className="p-8 space-y-6">
+                            {/* Total a Pagar Gigante */}
+                            <div className="flex justify-between items-end border-b border-gray-700 pb-4">
+                                <span className="text-gray-400 text-xl font-bold">Total a Pagar</span>
+                                <span className="text-5xl font-extrabold text-green-400">
+                                    ${total.toLocaleString()}
+                                </span>
+                            </div>
+
+                            {/* Selector de Método de Pago */}
+                            <div className="grid grid-cols-2 gap-4">
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setMetodoPago('efectivo');
+                                        setMontoRecibido('');
+                                    }}
+                                    className={`py-4 rounded-xl font-bold text-lg border-2 transition-all ${metodoPago === 'efectivo' ? 'bg-blue-600 border-blue-400 text-white' : 'bg-gray-800 border-gray-700 text-gray-400 hover:bg-gray-700'}`}>
+                                    💵 Efectivo
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setMetodoPago('transferencia');
+                                        setMontoRecibido(total.toString()); // Autocompleta el total
+                                    }}
+                                    className={`py-4 rounded-xl font-bold text-lg border-2 transition-all ${metodoPago === 'transferencia' ? 'bg-indigo-600 border-indigo-400 text-white' : 'bg-gray-800 border-gray-700 text-gray-400 hover:bg-gray-700'}`}>
+                                    📱 Transferencia
+                                </button>
+                            </div>
+
+                            {/* Input para calcular vuelto (Solo si es efectivo) */}
+                            {metodoPago === 'efectivo' && (
+                                <div className="space-y-2">
+                                    <label className="text-gray-400 font-bold">Abonó con:</label>
+                                    <div className="relative">
+                                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 text-2xl font-bold">
+                                            $
+                                        </span>
+                                        <input
+                                            type="number"
+                                            autoFocus // 👈 Clave para no usar el mouse
+                                            min={total}
+                                            value={montoRecibido}
+                                            onChange={(e) => setMontoRecibido(e.target.value)}
+                                            className="w-full bg-gray-950 border-2 border-gray-700 rounded-xl py-4 pl-12 pr-4 text-3xl font-bold text-white focus:border-blue-500 focus:outline-none focus:ring-4 focus:ring-blue-500/20"
+                                            placeholder={total.toString()}
+                                        />
+                                    </div>
+
+                                    {/* Cálculo del vuelto automático */}
+                                    {montoRecibido && Number(montoRecibido) >= total && (
+                                        <div className="flex justify-between items-center bg-gray-800 p-4 rounded-xl mt-4">
+                                            <span className="text-gray-300 font-bold">Su vuelto:</span>
+                                            <span className="text-3xl font-bold text-orange-400">
+                                                ${(Number(montoRecibido) - total).toLocaleString()}
+                                            </span>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* Botones de acción */}
+                            <div className="flex gap-4 pt-4">
+                                <button
+                                    type="button"
+                                    onClick={() => setMostrarCobro(false)}
+                                    className="px-6 py-4 rounded-xl font-bold text-gray-400 bg-gray-800 hover:bg-gray-700 transition-colors">
+                                    Cancelar (Esc)
+                                </button>
+                                <button
+                                    type="submit"
+                                    disabled={loading}
+                                    className="flex-1 bg-green-600 hover:bg-green-500 text-white font-extrabold text-xl py-4 rounded-xl shadow-lg shadow-green-600/30 transition-all">
+                                    {loading ? 'Procesando...' : 'CONFIRMAR (Enter)'}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
                 </div>
             )}
 
