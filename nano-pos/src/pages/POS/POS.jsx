@@ -1,4 +1,4 @@
-import { Search, ShoppingCart, LayoutDashboard, LogOut, Store, Trash2, Minus, Plus} from 'lucide-react';
+import { Search, AlertTriangle, ShoppingCart, LayoutDashboard, LogOut, Store, Trash2, Minus, Plus } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { supabase } from '../../services/supabase';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -15,12 +15,41 @@ const LOCALES_GALERIA = [
     { id: 4, nombre: 'Regalería' },
 ];
 
+// --- FUNCIÓN PARA GENERAR SONIDO DE ERROR (BEEP GRAVE) ---
+const playErrorSound = () => {
+    try {
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const oscillator = audioCtx.createOscillator();
+        const gainNode = audioCtx.createGain();
+
+        oscillator.connect(gainNode);
+        gainNode.connect(audioCtx.destination);
+
+        oscillator.type = 'sawtooth'; // Tipo de onda áspera para que suene a error
+        oscillator.frequency.setValueAtTime(150, audioCtx.currentTime); // Frecuencia grave
+        
+        // Efecto de caída de volumen rápida
+        gainNode.gain.setValueAtTime(0.5, audioCtx.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
+
+        oscillator.start(audioCtx.currentTime);
+        oscillator.stop(audioCtx.currentTime + 0.3);
+    } catch (e) {
+        console.error("El navegador no soporta Web Audio API", e);
+    }
+};
+
 export default function POS() {
     const [searchTerm, setSearchTerm] = useState('');
     const [products, setProducts] = useState([]);
     const [cart, setCart] = useState([]);
     const [loading, setLoading] = useState(false);
     const [ticketData, setTicketData] = useState(null);
+
+    // --- ESTADOS PARA EL MODAL DE COBRO ---
+    const [mostrarCobro, setMostrarCobro] = useState(false);
+    const [metodoPago, setMetodoPago] = useState('efectivo');
+    const [montoRecibido, setMontoRecibido] = useState('');
 
     const [cajaAbierta, setCajaAbierta] = useState(null);
     const [verificandoCaja, setVerificandoCaja] = useState(true);
@@ -37,6 +66,7 @@ export default function POS() {
     const [vistaActiva, setVistaActiva] = useState('catalogo'); // Controla qué pestaña vemos
     const [ventasTurno, setVentasTurno] = useState([]); // Guarda el historial de ventas
     const [cargandoVentas, setCargandoVentas] = useState(false);
+    const [mensajeFlotante, setMensajeFlotante] = useState(null);
 
     const handleLogout = async () => {
         // EL CANDADO: Si hay caja abierta, frenamos la salida
@@ -207,10 +237,21 @@ export default function POS() {
             .eq('codigo_barras', codigo) // Buscamos coincidencia EXACTA
             .single(); // Traemos solo uno
 
-        // 👇 AHORA USAMOS LA VARIABLE "ERROR" PARA CAPTURAR FALLOS
+        // 👇 AHORA USAMOS LA ALERTA FLOTANTE Y EL SONIDO
         if (error || !data) {
             console.warn('Código no encontrado:', error?.message);
-            alert(`❌ El código ${codigo} no existe en tu inventario.`);
+
+            // Reproducir sonido de error
+            playErrorSound();
+
+            // Mostrar mensaje flotante
+            setMensajeFlotante(`El código ${codigo} no existe.`);
+
+            // Desaparecer el mensaje a los 3 segundos
+            setTimeout(() => {
+                setMensajeFlotante(null);
+            }, 3000);
+
             setSearchTerm('');
             setLoading(false);
             return; // Cortamos la función acá
@@ -298,15 +339,28 @@ export default function POS() {
 
     const total = cart.reduce((acc, item) => acc + item.precio * item.cantidad, 0);
 
-    const handleCheckout = async () => {
+    // --- LÓGICA DE COBRO ---
+    const total = cart.reduce((acc, item) => acc + item.precio * item.cantidad, 0);
+
+    const iniciarCobro = () => {
         if (cart.length === 0) return;
         if (!cajaAbierta) {
             alert('Bloqueo de seguridad: No podés vender sin abrir la caja.');
             return;
         }
+        setMetodoPago('efectivo');
+        setMontoRecibido(''); // Reseteamos el input
+        setMostrarCobro(true); // Abrimos el modal
+    };
 
-        const confirm = window.confirm(`¿Confirmar venta por $${total}?`);
-        if (!confirm) return;
+    const confirmarVentaFinal = async (e) => {
+        if (e) e.preventDefault();
+
+        // Validación básica
+        if (metodoPago === 'efectivo' && montoRecibido !== '' && Number(montoRecibido) < total) {
+            alert('El monto recibido es menor al total a pagar.');
+            return;
+        }
 
         setLoading(true);
         try {
@@ -316,7 +370,7 @@ export default function POS() {
                 p_vendedor_id: usuarioActual.id,
                 p_turno_id: cajaAbierta.id,
                 p_total: total,
-                p_metodo_pago: 'efectivo',
+                p_metodo_pago: metodoPago, // 👈 Ahora usa lo que eligió el cajero
                 p_detalles: cart,
             };
 
@@ -325,30 +379,34 @@ export default function POS() {
 
             const localObj = LOCALES_GALERIA.find((l) => l.id === localActualId);
 
+            // Armamos el ticket para el modal (si usas impresora después)
             setTicketData({
-                cart: [...cart], // Hacemos una copia del carrito
+                cart: [...cart],
                 total: total,
                 numVenta: numeroVenta,
                 localNombre: localObj ? localObj.nombre : 'Local Comercial',
                 vendedorEmail: usuarioActual.identificador || usuarioActual.email.split('@')[0],
             });
 
+            // Actualizamos la caja localmente
             setCajaAbierta((prev) => ({
                 ...prev,
                 efectivo_esperado: Number(prev.efectivo_esperado) + total,
             }));
 
+            // El truco visual para la pestaña "Mis Ventas"
             const nuevaVentaLocal = {
                 id: numeroVenta,
                 created_at: new Date().toISOString(),
-                metodo_pago: 'efectivo',
+                metodo_pago: metodoPago,
                 total: total,
             };
             setVentasTurno((prev) => [nuevaVentaLocal, ...prev]);
 
+            // Limpiamos todo
             setCart([]);
             setSearchTerm('');
-            setProducts([]);
+            setMostrarCobro(false); // Cerramos el modal
         } catch (error) {
             console.error(error);
             alert('❌ Error al procesar la venta: ' + error.message);
@@ -357,20 +415,23 @@ export default function POS() {
         }
     };
 
-    // --- ATAJO F10 ---
+    // --- ATAJO F10 (Abre el modal en vez de cobrar directo) ---
     useEffect(() => {
         const manejarTeclas = (evento) => {
             if (evento.key === 'F10') {
                 evento.preventDefault();
-                if (cart.length > 0 && !loading && cajaAbierta && !mostrarCierre) {
-                    handleCheckout();
+                if (cart.length > 0 && !loading && cajaAbierta && !mostrarCierre && !mostrarCobro) {
+                    iniciarCobro();
                 }
+            }
+            // Si el modal está abierto, Enter confirma y Escape lo cierra
+            if (mostrarCobro) {
+                if (evento.key === 'Escape') setMostrarCobro(false);
             }
         };
         window.addEventListener('keydown', manejarTeclas);
         return () => window.removeEventListener('keydown', manejarTeclas);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [cart, loading, cajaAbierta, mostrarCierre]);
+    }, [cart, loading, cajaAbierta, mostrarCierre, mostrarCobro]);
 
     if (verificandoCaja) {
         return (
@@ -401,6 +462,14 @@ export default function POS() {
                         rolUsuario={rolUsuario}
                         onCajaAbierta={(nuevoTurno) => setCajaAbierta(nuevoTurno)}
                     />
+                </div>
+            )}
+
+            {/* 👇 MENSAJE FLOTANTE DE ERROR (TOAST) 👇 */}
+            {mensajeFlotante && (
+                <div className="absolute top-10 left-1/2 transform -translate-x-1/2 z-[60] bg-red-600 text-white px-6 py-3 rounded-xl shadow-2xl border-2 border-red-400 font-bold flex items-center gap-3 animate-bounce">
+                    <AlertTriangle size={24} />
+                    {mensajeFlotante}
                 </div>
             )}
 
@@ -647,7 +716,7 @@ export default function POS() {
                             <span className="text-4xl font-bold text-green-500">${total}</span>
                         </div>
                         <button
-                            onClick={handleCheckout}
+                            onClick={iniciarCobro}
                             disabled={cart.length === 0 || loading}
                             className={`w-full py-5 rounded-xl font-bold text-xl text-white shadow-lg transition-all ${loading ? 'bg-gray-600 cursor-not-allowed' : 'bg-green-600 hover:bg-green-500'}`}>
                             {loading ? 'Procesando...' : 'COBRAR (F10)'}
