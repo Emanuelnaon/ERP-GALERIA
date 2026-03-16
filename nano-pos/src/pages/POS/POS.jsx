@@ -437,12 +437,13 @@ export default function POS() {
                 className={`flex flex-col lg:flex-row w-full h-full print:hidden ${!cajaAbierta || mostrarCierre ? 'blur-md pointer-events-none' : ''}`}>
                 <div className="w-full lg:w-[70%] xl:w-[75%] p-4 lg:p-6 flex flex-col border-b lg:border-b-0 lg:border-r border-gray-800 h-[60vh] lg:h-full">
                     {/* ENCABEZADO Y CONTROLES */}
-                    <div className="flex justify-between items-center mb-6">
-                        {/* 👇 EL NUEVO SWITCH DE PESTAÑAS 👇 */}
-                        <div className="flex bg-gray-950 p-1 rounded-lg border border-gray-800 shadow-inner">
+                    {/* 👇 Agregamos flex-wrap al contenedor principal y un gap-4 para la separación */}
+                    <div className="flex flex-wrap justify-between items-center gap-4 mb-6">
+                        {/* PESTAÑAS */}
+                        <div className="flex bg-gray-950 p-1 rounded-lg border border-gray-800 shadow-inner w-full md:w-auto">
                             <button
                                 onClick={() => setVistaActiva('catalogo')}
-                                className={`px-6 py-2 rounded-md font-bold transition-all ${
+                                className={`flex-1 md:flex-none px-4 md:px-6 py-2 rounded-md font-bold transition-all text-sm md:text-base ${
                                     vistaActiva === 'catalogo'
                                         ? 'bg-blue-600 text-white shadow-md'
                                         : 'text-gray-400 hover:text-white'
@@ -451,7 +452,7 @@ export default function POS() {
                             </button>
                             <button
                                 onClick={() => setVistaActiva('historial')}
-                                className={`px-6 py-2 rounded-md font-bold transition-all ${
+                                className={`flex-1 md:flex-none px-4 md:px-6 py-2 rounded-md font-bold transition-all text-sm md:text-base ${
                                     vistaActiva === 'historial'
                                         ? 'bg-blue-600 text-white shadow-md'
                                         : 'text-gray-400 hover:text-white'
@@ -460,15 +461,17 @@ export default function POS() {
                             </button>
                         </div>
 
-                        <div className="flex gap-3 items-center">
+                        {/* BOTONES DE ACCIÓN */}
+                        {/* 👇 Agregamos flex-wrap a los botones y achicamos un poco la letra en móviles */}
+                        <div className="flex flex-wrap gap-2 md:gap-3 items-center w-full xl:w-auto justify-start xl:justify-end">
                             {/* SELECTOR DE LOCAL (Solo para Admin) */}
                             {rolUsuario === 'admin' && (
-                                <div className="flex items-center gap-2 bg-gray-800 px-3 py-2 rounded-lg border border-gray-700">
-                                    <Store size={16} className="text-blue-400" />
+                                <div className="flex items-center gap-2 bg-gray-800 px-2 py-2 rounded-lg border border-gray-700">
+                                    <Store size={16} className="text-blue-400 hidden sm:block" />
                                     <select
                                         value={localActualId || 1}
                                         onChange={(e) => setLocalActualId(Number(e.target.value))}
-                                        className="bg-transparent text-white font-bold focus:outline-none cursor-pointer">
+                                        className="bg-transparent text-white font-bold focus:outline-none cursor-pointer text-xs md:text-sm">
                                         {LOCALES_GALERIA.map((l) => (
                                             <option key={l.id} value={l.id} className="bg-gray-800">
                                                 {l.nombre}
@@ -477,35 +480,37 @@ export default function POS() {
                                     </select>
                                 </div>
                             )}
+
                             <button
                                 onClick={handleRelevo}
-                                className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 rounded-lg text-sm font-bold text-white transition-colors shadow-lg">
-                                Relevo de Personal
+                                className="flex items-center gap-1 md:gap-2 px-3 py-2 bg-indigo-600 hover:bg-indigo-700 rounded-lg text-xs md:text-sm font-bold text-white transition-colors shadow-lg">
+                                Relevo
                             </button>
+
                             <button
                                 onClick={() => setMostrarCierre(true)}
-                                className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg text-sm font-bold shadow-lg">
+                                className="flex items-center gap-1 md:gap-2 px-3 py-2 bg-red-600 hover:bg-red-700 rounded-lg text-xs md:text-sm font-bold shadow-lg">
                                 Cerrar Caja
                             </button>
 
                             <button
                                 onClick={() => setMostrarGasto(true)}
-                                className="flex items-center gap-2 px-4 py-2 bg-orange-600 hover:bg-orange-700 rounded-lg text-sm font-bold shadow-lg">
-                                Retirar Efectivo
+                                className="flex items-center gap-1 md:gap-2 px-3 py-2 bg-orange-600 hover:bg-orange-700 rounded-lg text-xs md:text-sm font-bold shadow-lg">
+                                Retiro
                             </button>
 
                             {rolUsuario === 'admin' && (
                                 <button
                                     onClick={() => navigate('/dashboard')}
-                                    className="flex items-center gap-2 px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg text-sm text-gray-300 border border-gray-700">
-                                    <LayoutDashboard size={16} /> Admin
+                                    className="flex items-center gap-1 md:gap-2 px-3 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg text-xs md:text-sm text-gray-300 border border-gray-700">
+                                    <LayoutDashboard size={14} className="hidden sm:block" /> Admin
                                 </button>
                             )}
 
                             <button
                                 onClick={handleLogout}
-                                className="flex items-center gap-2 px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg text-sm text-red-400 border border-gray-700">
-                                <LogOut size={16} /> Salir
+                                className="flex items-center gap-1 md:gap-2 px-3 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg text-xs md:text-sm text-red-400 border border-gray-700">
+                                <LogOut size={14} className="hidden sm:block" /> Salir
                             </button>
                         </div>
                     </div>
@@ -581,7 +586,7 @@ export default function POS() {
                         </div>
                     )}
                 </div>
-                
+
                 {/* TICKET */}
                 <div className="w-full lg:w-[30%] xl:w-[25%] bg-gray-950 p-4 lg:p-6 flex flex-col shadow-2xl h-[40vh] lg:h-full">
                     <h2 className="text-2xl font-bold mb-6 flex items-center gap-2">
