@@ -124,7 +124,7 @@ export default function Dashboard() {
         }
 
         try {
-            const { error } = await supabase.from('caja').insert([
+            const { error } = await supabase.from('turnos_caja').insert([
                 {
                     local_id: local.id,
                     usuario_id: usuarioAdmin.id, // El admin que está logueado
@@ -213,10 +213,9 @@ export default function Dashboard() {
                                         <span className="bg-red-500/20 text-red-100 text-xs font-bold px-3 py-1 rounded-full border border-red-500/30">
                                             CERRADO
                                         </span>
-                                        <button 
+                                        <button
                                             onClick={() => handleAperturaDesdeDashboard(local)}
-                                            className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-3 py-1 rounded-full shadow transition-colors"
-                                        >
+                                            className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-3 py-1 rounded-full shadow transition-colors">
                                             Abrir Nueva Caja
                                         </button>
                                     </div>
