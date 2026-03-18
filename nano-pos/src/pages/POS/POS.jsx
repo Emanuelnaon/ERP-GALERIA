@@ -241,6 +241,89 @@ export default function POS() {
         setLoading(false);
     };
 
+    // --- 🖨️ MOTOR DE IMPRESIÓN TÉRMICA ---
+    const imprimirTicket = (carritoVenta, totalVenta, metodo, pagaCon, vuelto, nombreLocal) => {
+        // Creamos una ventana invisible
+        const ventana = window.open('', 'PRINT', 'height=400,width=600');
+
+        // Le inyectamos el diseño clásico de ticket de supermercado/kiosco
+        ventana.document.write(`
+            <html>
+                <head>
+                    <title>Ticket de Venta</title>
+                    <style>
+                        /* Forzamos el ancho para rollo térmico estándar (58mm) */
+                        body { 
+                            font-family: monospace; 
+                            width: 58mm; 
+                            margin: 0 auto; 
+                            padding: 2mm; 
+                            color: #000;
+                        }
+                        h2, h3 { text-align: center; margin: 0 0 5px 0; font-size: 14px; }
+                        p { margin: 2px 0; font-size: 12px; }
+                        .divisor { border-top: 1px dashed #000; margin: 5px 0; }
+                        table { width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 5px; }
+                        th { text-align: left; border-bottom: 1px solid #000; padding-bottom: 2px; }
+                        td { padding: 2px 0; vertical-align: top; }
+                        .cant { width: 15%; text-align: center; }
+                        .precio { width: 30%; text-align: right; }
+                        .total-txt { font-size: 14px; font-weight: bold; text-align: right; margin-top: 5px; }
+                        .centrado { text-align: center; }
+                        /* 👇 Estilo para el aviso legal */
+                        .legal { text-align: center; font-size: 9px; font-weight: bold; border: 1px solid #000; padding: 2px; margin-bottom: 5px; }
+                    </style>
+                </head>
+                <body>
+                    <h2>NANO POS - ${nombreLocal}</h2>
+                    <div class="legal">DOCUMENTO NO VÁLIDO COMO FACTURA</div>
+                    <p class="centrado">Ticket de Control Interno</p>
+                    <p>Fecha: ${new Date().toLocaleString('es-AR')}</p>
+                    <div class="divisor"></div>
+                    
+                    <table>
+                        <thead>
+                            <tr>
+                                <th class="cant">C.</th>
+                                <th>Detalle</th>
+                                <th class="precio">Subt</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${carritoVenta
+                                .map(
+                                    (item) => `
+                                <tr>
+                                    <td class="cant">${item.cantidad}</td>
+                                    <td>${item.nombre}</td>
+                                    <td class="precio">$${item.precio * item.cantidad}</td>
+                                </tr>
+                            `,
+                                )
+                                .join('')}
+                        </tbody>
+                    </table>
+                    
+                    <div class="divisor"></div>
+                    <p class="total-txt">TOTAL: $${totalVenta}</p>
+                    <p>Pago: ${metodo}</p>
+                    ${metodo === 'EFECTIVO' ? `<p>Abona con: $${pagaCon}<br>Vuelto: $${vuelto}</p>` : ''}
+                    
+                    <div class="divisor"></div>
+                    <p class="centrado">¡Gracias por su compra!</p>
+                </body>
+            </html>
+        `);
+
+        // Cerramos el documento, disparamos la impresora y matamos la ventana
+        ventana.document.close();
+        ventana.focus();
+        setTimeout(() => {
+            ventana.print();
+            ventana.close();
+        }, 250);
+    };
+
     // --- LECTOR DE CÓDIGO DE BARRAS ---
     const handleEscanearCodigo = async (codigo) => {
         if (!codigo) return;
@@ -384,7 +467,7 @@ export default function POS() {
                 p_vendedor_id: usuarioActual.id,
                 p_turno_id: cajaAbierta.id,
                 p_total: total,
-                p_metodo_pago: metodoPago, // 👈 Ahora usa lo que eligió el cajero
+                p_metodo_pago: metodoPago,
                 p_detalles: cart,
             };
 
@@ -393,7 +476,7 @@ export default function POS() {
 
             const localObj = LOCALES_GALERIA.find((l) => l.id === localActualId);
 
-            // Armamos el ticket para el modal (si usas impresora después)
+            // Armamos el ticket para el modal visual
             setTicketData({
                 cart: [...cart],
                 total: total,
@@ -401,6 +484,21 @@ export default function POS() {
                 localNombre: localObj ? localObj.nombre : 'Local Comercial',
                 vendedorEmail: usuarioActual.identificador || usuarioActual.email.split('@')[0],
             });
+
+            // 👇 🖨️ ACÁ DISPARAMOS LA IMPRESORA TÉRMICA 👇
+            // Le pasamos los datos: carrito, total, método de pago, con cuánto pagó, y el vuelto.
+            const vueltoCalc = metodoPago === 'efectivo' && montoRecibido ? Number(montoRecibido) - total : 0;
+            const pagoConCalc = metodoPago === 'efectivo' && montoRecibido ? montoRecibido : total;
+
+            imprimirTicket(
+                cart,
+                total,
+                metodoPago.toUpperCase(),
+                pagoConCalc,
+                vueltoCalc,
+                localObj ? localObj.nombre : 'Local Comercial',
+            );
+            // 👆 ------------------------------------------ 👆
 
             // Actualizamos la caja localmente
             setCajaAbierta((prev) => ({
