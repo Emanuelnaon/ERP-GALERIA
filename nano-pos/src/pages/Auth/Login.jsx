@@ -137,6 +137,7 @@ export default function Login() {
                                 required
                                 className="block w-full rounded-md border-0 bg-gray-800 py-3 pl-10 text-white placeholder:text-gray-500 focus:ring-2 focus:ring-blue-600 sm:text-sm"
                                 placeholder="••••••••"
+                                autoComplete='current-password'
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
                             />
