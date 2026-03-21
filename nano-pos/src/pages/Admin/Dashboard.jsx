@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../../services/supabase';
 import { Store, DollarSign, Clock, AlertTriangle, CheckCircle, ArrowLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-
+import ImportadorMasivo from '../../components/ImportadorMasivo';
 // 1. SOLUCIÓN ESLINT: Definimos los locales para que el mapa sepa qué dibujar
 const localesGaleria = [
     { id: 1, nombre: 'Zapatería', color: 'bg-blue-600' },
@@ -159,6 +159,7 @@ export default function Dashboard() {
     return (
         <div className="min-h-screen bg-gray-900 text-white p-6 lg:p-10">
             {/* Header del Dashboard */}
+            <ImportadorMasivo />
             <div className="flex justify-between items-center mb-10 border-b border-gray-800 pb-6">
                 <div>
                     <h1 className="text-3xl font-bold flex items-center gap-3">
