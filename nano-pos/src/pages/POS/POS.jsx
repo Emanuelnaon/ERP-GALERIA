@@ -676,12 +676,19 @@ export default function POS() {
                     <CierreCajaModal
                         turno={cajaAbierta}
                         onClose={() => setMostrarCierre(false)}
-                        onCierreExitoso={() => {
+                        onCierreExitoso={async () => {
                             setMostrarCierre(false);
                             setCajaAbierta(null); // Local state set to null (ahora la antena lo respeta)
                             alert('✅ ¡Turno cerrado exitosamente!');
-                            // Si es admin, vuelve al panel. Si es vendedor, se queda para volver a abrir.
-                            if (rolUsuario === 'admin') navigate('/dashboard');
+                            
+                            if (rolUsuario === 'admin') {
+                                // Si es el dueño, capaz quiere ir al panel a ver números
+                                navigate('/dashboard');
+                            } else {
+                                // Si es vendedor, cerramos su sesión sí o sí para que entre el próximo
+                                await supabase.auth.signOut();
+                                navigate('/login');
+                            }
                         }}
                     />
                 </div>
