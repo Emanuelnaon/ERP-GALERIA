@@ -64,6 +64,7 @@ export default function POS() {
 
     const [vistaActiva, setVistaActiva] = useState('catalogo'); // Controla qué pestaña vemos
     const [ventasTurno, setVentasTurno] = useState([]); // Guarda el historial de ventas
+    const [gastosTurno, setGastosTurno] = useState([]);
     const [cargandoVentas, setCargandoVentas] = useState(false);
     const [mensajeFlotante, setMensajeFlotante] = useState(null);
 
@@ -168,29 +169,91 @@ export default function POS() {
         fetchCaja();
     }, [localActualId]);
 
-    // --- HISTORIAL DE VENTAS DEL TURNO ---
+    // --- HISTORIAL COMPLETO Y ANTENAS REALTIME ---
     useEffect(() => {
-        const fetchVentasTurno = async () => {
-            if (vistaActiva !== 'historial' || !cajaAbierta) return;
+        if (!cajaAbierta?.id) return;
+
+        const cargarHistorial = async () => {
             setCargandoVentas(true);
             try {
-                const { data, error } = await supabase
-                    .from('ventas') // Asegurate de que tu tabla se llame así
+                // 1. Traemos Ventas
+                const { data: ventas } = await supabase
+                    .from('ventas')
                     .select('*')
                     .eq('turno_id', cajaAbierta.id)
                     .order('created_at', { ascending: false });
 
-                if (error) throw error;
-                setVentasTurno(data || []);
+                // 2. Traemos Retiros
+                const { data: gastos } = await supabase
+                    .from('gastos_caja')
+                    .select('*')
+                    .eq('turno_id', cajaAbierta.id)
+                    .order('created_at', { ascending: false });
+
+                setVentasTurno(ventas || []);
+                setGastosTurno(gastos || []);
             } catch (error) {
-                console.error('Error buscando ventas:', error);
+                console.error('Error buscando historial:', error);
             } finally {
                 setCargandoVentas(false);
             }
         };
 
-        fetchVentasTurno();
-    }, [vistaActiva, cajaAbierta]);
+        cargarHistorial();
+
+        // -- ANTENAS --
+        const canalCaja = supabase
+            .channel('caja-actual')
+            .on(
+                'postgres_changes',
+                { event: 'UPDATE', schema: 'public', table: 'turnos_caja', filter: `id=eq.${cajaAbierta.id}` },
+                (payload) => {
+                    // 👇 EL ESCUDO ANTI-F5 👇
+                    if (payload.new.estado === 'CERRADO') {
+                        // Si la base de datos dice que se cerró, limpiamos la variable para que salte el Modal de Apertura
+                        setCajaAbierta(null);
+                    } else {
+                        // Si sigue abierta (ej: se actualizó un vuelto), actualizamos los datos nomás
+                        setCajaAbierta(payload.new);
+                    }
+                },
+            )
+            .subscribe();
+
+        const canalVentas = supabase
+            .channel('ventas-nuevas')
+            .on(
+                'postgres_changes',
+                { event: 'INSERT', schema: 'public', table: 'ventas', filter: `turno_id=eq.${cajaAbierta.id}` },
+                (payload) => {
+                    setVentasTurno((prev) => {
+                        if (prev.some((v) => v.id === payload.new.id)) return prev;
+                        return [payload.new, ...prev];
+                    });
+                },
+            )
+            .subscribe();
+
+        const canalGastos = supabase
+            .channel('gastos-nuevos')
+            .on(
+                'postgres_changes',
+                { event: 'INSERT', schema: 'public', table: 'gastos_caja', filter: `turno_id=eq.${cajaAbierta.id}` },
+                (payload) => {
+                    setGastosTurno((prev) => {
+                        if (prev.some((g) => g.id === payload.new.id)) return prev;
+                        return [payload.new, ...prev];
+                    });
+                },
+            )
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(canalCaja);
+            supabase.removeChannel(canalVentas);
+            supabase.removeChannel(canalGastos);
+        };
+    }, [cajaAbierta?.id]);
 
     // --- BUSCADOR ---
     const searchProducts = async (term) => {
@@ -500,10 +563,10 @@ export default function POS() {
             );
             // 👆 ------------------------------------------ 👆
 
-            // Actualizamos la caja localmente
+            // Actualizamos la caja localmente (Solo para efecto rápido, la antena luego la valida)
             setCajaAbierta((prev) => ({
                 ...prev,
-                efectivo_esperado: Number(prev.efectivo_esperado) + total,
+                efectivo_esperado: Number(prev?.efectivo_esperado || 0) + total,
             }));
 
             // El truco visual para la pestaña "Mis Ventas"
@@ -513,7 +576,11 @@ export default function POS() {
                 metodo_pago: metodoPago,
                 total: total,
             };
-            setVentasTurno((prev) => [nuevaVentaLocal, ...prev]);
+
+            setVentasTurno((prev) => {
+                if (prev.some((v) => v.id === nuevaVentaLocal.id)) return prev;
+                return [nuevaVentaLocal, ...prev];
+            });
 
             // Limpiamos todo
             setCart([]);
@@ -564,6 +631,24 @@ export default function POS() {
             navigate('/login');
         }
     };
+
+    // --- CÁLCULOS MATEMÁTICOS DEL TABLERO EN TIEMPO REAL ---
+    const fondoInicial = Number(cajaAbierta?.saldo_inicial || 0);
+
+    // Total vendido (Suma Efectivo y Transferencias para las estadísticas)
+    const totalVendido = ventasTurno.reduce((acc, v) => acc + Number(v.total), 0);
+
+    // Solo lo vendido en EFECTIVO (porque las transferencias no van al cajón físico)
+    const ventasEfectivo = ventasTurno
+        .filter((v) => v.metodo_pago?.toLowerCase() === 'efectivo')
+        .reduce((acc, v) => acc + Number(v.total), 0);
+
+    const totalRetiros = gastosTurno.reduce((acc, g) => acc + Number(g.monto), 0);
+
+    // 💰 LA VERDAD ABSOLUTA DEL CAJÓN FÍSICO
+    const dineroFisicoEnCaja = fondoInicial + ventasEfectivo - totalRetiros;
+    // --------------------------------------------------------
+
     return (
         <div className="flex h-screen bg-gray-900 text-white overflow-hidden relative print:bg-white print:h-auto print:overflow-visible">
             {/* MODALES */}
@@ -593,7 +678,7 @@ export default function POS() {
                         onClose={() => setMostrarCierre(false)}
                         onCierreExitoso={() => {
                             setMostrarCierre(false);
-                            setCajaAbierta(null);
+                            setCajaAbierta(null); // Local state set to null (ahora la antena lo respeta)
                             alert('✅ ¡Turno cerrado exitosamente!');
                             // Si es admin, vuelve al panel. Si es vendedor, se queda para volver a abrir.
                             if (rolUsuario === 'admin') navigate('/dashboard');
@@ -697,6 +782,7 @@ export default function POS() {
                 <div className="absolute inset-0 z-50">
                     <GastoModal
                         turnoId={cajaAbierta.id}
+                        maximoPermitido={dineroFisicoEnCaja}
                         onClose={() => setMostrarGasto(false)}
                         onGastoRegistrado={(monto) => {
                             setMostrarGasto(false);
@@ -714,9 +800,12 @@ export default function POS() {
                     <div className="flex flex-wrap justify-between items-center gap-4 mb-6">
                         {/* PESTAÑAS */}
                         <div className="flex bg-gray-950 p-1 rounded-lg border border-gray-800 shadow-inner w-full md:w-auto">
-                            <button onClick={() => setVistaActiva('catalogo')}
+                            <button
+                                onClick={() => setVistaActiva('catalogo')}
                                 className={`flex-1 md:flex-none px-4 md:px-6 py-2 rounded-md font-bold transition-all text-sm md:text-base ${
-                                    vistaActiva === 'catalogo' ? 'bg-blue-600 text-white shadow-md' : 'text-gray-400 hover:text-white'
+                                    vistaActiva === 'catalogo'
+                                        ? 'bg-blue-600 text-white shadow-md'
+                                        : 'text-gray-400 hover:text-white'
                                 }`}>
                                 Catálogo
                             </button>
@@ -826,31 +915,55 @@ export default function POS() {
                     ) : (
                         <div className="flex-1 overflow-y-auto bg-gray-900 rounded-xl border border-gray-800 p-4 pr-2">
                             <h3 className="text-xl font-bold mb-4 text-gray-300">Resumen del Turno</h3>
-                            
-                            <div className="bg-gray-800 p-4 md:p-6 rounded-xl border border-gray-700 mb-6 flex flex-wrap justify-between items-center shadow-lg gap-4">
-                                <div>
-                                    <p className="text-gray-400 text-xs md:text-sm font-bold uppercase mb-1">Fondo Inicial</p>
-                                    <p className="text-xl md:text-2xl font-bold text-white">
-                                        ${Number(cajaAbierta?.saldo_inicial || 0).toLocaleString()}
+
+                            {/* 👇 TABLERO DE RESUMEN (4 BLOQUES) 👇 */}
+                            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 bg-gray-800 p-4 rounded-xl border border-gray-700 mb-6 shadow-lg">
+                                {/* 1. Fondo Inicial */}
+                                <div className="p-3 bg-gray-900 rounded-lg border border-gray-700 flex flex-col justify-center">
+                                    <p className="text-gray-400 text-[10px] md:text-xs font-bold uppercase mb-1">
+                                        Fondo Inicial
+                                    </p>
+                                    <p className="text-lg md:text-xl font-bold text-white">
+                                        ${fondoInicial.toLocaleString()}
                                     </p>
                                 </div>
-                                <div className="text-left md:text-center border-l md:border-l-0 border-gray-700 pl-4 md:pl-0">
-                                    <p className="text-gray-400 text-xs md:text-sm font-bold uppercase mb-1">Total Vendido</p>
-                                    <p className="text-xl md:text-2xl font-bold text-blue-400">
-                                        ${ventasTurno.reduce((acc, v) => acc + Number(v.total), 0).toLocaleString()}
+
+                                {/* 2. Total Vendido (Global) */}
+                                <div className="p-3 bg-gray-900 rounded-lg border border-gray-700 flex flex-col justify-center">
+                                    <p className="text-gray-400 text-[10px] md:text-xs font-bold uppercase mb-1">
+                                        Total Vendido
+                                    </p>
+                                    <p className="text-lg md:text-xl font-bold text-blue-400">
+                                        ${totalVendido.toLocaleString()}
                                     </p>
                                 </div>
-                                <div className="text-left md:text-right border-l md:border-l-0 border-gray-700 pl-4 md:pl-0 w-full md:w-auto mt-2 md:mt-0 bg-gray-900 md:bg-transparent p-3 md:p-0 rounded-lg">
-                                    <p className="text-gray-400 text-xs md:text-sm font-bold uppercase mb-1">Efectivo a rendir (Cajón)</p>
-                                    <p className="text-3xl md:text-4xl font-extrabold text-green-400">
-                                        ${Number(cajaAbierta?.efectivo_esperado || 0).toLocaleString()}
+
+                                {/* 3. Retiros */}
+                                <div className="p-3 bg-gray-900 rounded-lg border border-gray-700 flex flex-col justify-center">
+                                    <p className="text-gray-400 text-[10px] md:text-xs font-bold uppercase mb-1">
+                                        Retiros
+                                    </p>
+                                    <p className="text-lg md:text-xl font-bold text-orange-400">
+                                        -${totalRetiros.toLocaleString()}
+                                    </p>
+                                </div>
+
+                                {/* 4. Efectivo a Rendir */}
+                                <div className="p-3 bg-gray-900 rounded-lg border-2 border-green-900/50 flex flex-col justify-center">
+                                    <p className="text-green-400/80 text-[10px] md:text-xs font-bold uppercase mb-1">
+                                        Efectivo a Rendir
+                                    </p>
+                                    <p className="text-xl md:text-2xl font-extrabold text-green-400">
+                                        ${dineroFisicoEnCaja.toLocaleString()}
                                     </p>
                                 </div>
                             </div>
                             {/* 👆 FIN DEL TABLERO 👆 */}
 
-                            <h3 className="text-lg font-bold mb-4 text-gray-400 border-b border-gray-800 pb-2">Historial de Tickets</h3>
-                            
+                            <h3 className="text-lg font-bold mb-4 text-gray-400 border-b border-gray-800 pb-2">
+                                Historial de Tickets
+                            </h3>
+
                             {cargandoVentas ? (
                                 <p className="text-center text-gray-500 mt-10">Cargando historial...</p>
                             ) : ventasTurno.length === 0 ? (

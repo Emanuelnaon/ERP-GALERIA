@@ -3,7 +3,7 @@ import { supabase } from '../../services/supabase';
 import { Store, DollarSign, Clock, AlertTriangle, CheckCircle, ArrowLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import ImportadorMasivo from '../../components/ImportadorMasivo';
-// 1. SOLUCIÓN ESLINT: Definimos los locales para que el mapa sepa qué dibujar
+
 const localesGaleria = [
     { id: 1, nombre: 'Zapatería', color: 'bg-blue-600' },
     { id: 2, nombre: 'Ropa', color: 'bg-purple-600' },
@@ -18,7 +18,8 @@ export default function Dashboard() {
     const navigate = useNavigate();
 
     useEffect(() => {
-        // Metemos la función adentro del useEffect para cumplir con las reglas de React
+        let canalDashboard = null; // Variable para guardar nuestra antena
+
         const verificarAccesoYcargarDatos = async () => {
             try {
                 // 1. Verificamos quién es el usuario
@@ -38,46 +39,67 @@ export default function Dashboard() {
                     .eq('id', user.id)
                     .single();
 
-                // 2.B SOLUCIÓN ESLINT: Si hay error al buscar el perfil, lo atajamos acá
                 if (errorPerfil) throw errorPerfil;
 
-                // 3. LA BARRERA DE SEGURIDAD: Si no es admin, lo echamos al POS
+                // 3. LA BARRERA DE SEGURIDAD
                 if (perfil?.user_role !== 'admin') {
                     alert('⛔ Acceso denegado. Solo el administrador puede ver el Centro de Comando.');
                     navigate('/pos');
                     return;
                 }
 
-                // Si es admin, cargamos las cajas normalmente...
-                const hoyInicio = new Date();
-                hoyInicio.setHours(0, 0, 0, 0);
+                // 4. FUNCIÓN PARA BUSCAR LOS DATOS DE LAS CAJAS
+                const fetchCajas = async () => {
+                    const hoyInicio = new Date();
+                    hoyInicio.setHours(0, 0, 0, 0);
 
-                const { data, error } = await supabase
-                    .from('turnos_caja')
-                    .select('*, gastos_caja(monto)')
-                    .gte('fecha_apertura', hoyInicio.toISOString())
-                    .order('fecha_apertura', { ascending: false });
+                    const { data, error } = await supabase
+                        .from('turnos_caja')
+                        .select('*, gastos_caja(monto)')
+                        .gte('fecha_apertura', hoyInicio.toISOString())
+                        .order('fecha_apertura', { ascending: false });
 
-                if (error) throw error;
-                setTurnosHoy(data || []);
+                    if (error) throw error;
+                    setTurnosHoy(data || []);
+                };
+
+                // Llamamos a la función por primera vez al entrar
+                await fetchCajas();
+                setLoading(false);
+
+                // 5. 👇 LA ANTENA REAL-TIME 👇
+                // Nos suscribimos a cualquier cambio en la tabla turnos_caja
+                canalDashboard = supabase
+                    .channel('dashboard-dueño')
+                    .on('postgres_changes', { event: '*', schema: 'public', table: 'turnos_caja' }, () => {
+                        console.log('⚡ Cambio detectado por Realtime. Actualizando Dashboard...');
+                        fetchCajas(); // Volvemos a buscar los datos automáticamente
+                    })
+                    .subscribe();
             } catch (error) {
                 console.error('Error cargando dashboard:', error);
-            } finally {
                 setLoading(false);
             }
         };
 
         verificarAccesoYcargarDatos();
+
+        // 6. APAGAMOS LA ANTENA AL SALIR
+        // Es importante limpiar el canal cuando el componente se desmonta para no gastar memoria
+        return () => {
+            if (canalDashboard) {
+                supabase.removeChannel(canalDashboard);
+            }
+        };
     }, [navigate]);
 
-    // --- NUEVA FUNCIÓN: CIERRE REMOTO (ADMIN) ---
+    // --- FUNCIONES DE ACCIÓN (Cierre Remoto y Apertura) ---
     const handleCierreRemoto = async (turno, nombreLocal) => {
-        // 1. Le pedimos al admin que ingrese cuánta plata hay
         const input = window.prompt(
             `🚨 CIERRE FORZOSO - ${nombreLocal}\n\nEl sistema espera: $${turno.efectivo_esperado}\n\nIngresá el monto EXACTO en efectivo físico que hay en la caja:`,
         );
 
-        if (input === null) return; // Si toca "Cancelar", no hacemos nada.
+        if (input === null) return;
 
         const montoReal = parseFloat(input);
         if (isNaN(montoReal) || montoReal < 0) {
@@ -88,7 +110,6 @@ export default function Dashboard() {
         const diferenciaCalculada = montoReal - Number(turno.efectivo_esperado);
 
         try {
-            // 2. Actualizamos la base de datos a la fuerza
             const { error } = await supabase
                 .from('turnos_caja')
                 .update({
@@ -100,16 +121,14 @@ export default function Dashboard() {
                 .eq('id', turno.id);
 
             if (error) throw error;
-
             alert('✅ Caja cerrada exitosamente de forma remota.');
-            window.location.reload(); // Recargamos la página para que el Dashboard se pinte de nuevo
+            // Ya no hace falta window.location.reload() porque la antena hace el trabajo 😎
         } catch (error) {
             console.error('Error en cierre remoto:', error);
             alert('❌ Hubo un error al intentar cerrar la caja.');
         }
     };
 
-    // --- NUEVA FUNCIÓN: APERTURA DESDE EL DASHBOARD ---
     const handleAperturaDesdeDashboard = async (local) => {
         const input = window.prompt(
             `💰 APERTURA DE CAJA - ${local.nombre}\n\nIngresá el fondo inicial (efectivo en caja):`,
@@ -127,23 +146,21 @@ export default function Dashboard() {
             const { error } = await supabase.from('turnos_caja').insert([
                 {
                     local_id: local.id,
-                    usuario_id: usuarioAdmin.id, // El admin que está logueado
+                    usuario_id: usuarioAdmin.id,
                     saldo_inicial: monto,
                     estado: 'ABIERTO',
                 },
             ]);
 
             if (error) throw error;
-
             alert(`✅ Caja de ${local.nombre} abierta con $${monto}.`);
-            window.location.reload(); // Recargamos para ver la tarjeta en verde
+            // Ya no hace falta window.location.reload() 😎
         } catch (error) {
             console.error('Error al abrir caja:', error);
             alert('❌ Hubo un error al intentar abrir la caja.');
         }
     };
 
-    // Función para encontrar el turno más reciente de un local específico
     const obtenerTurnoLocal = (localId) => {
         return turnosHoy.find((t) => Number(t.local_id) === localId);
     };
@@ -158,7 +175,6 @@ export default function Dashboard() {
 
     return (
         <div className="min-h-screen bg-gray-900 text-white p-6 lg:p-10">
-            {/* Header del Dashboard */}
             <ImportadorMasivo />
             <div className="flex justify-between items-center mb-10 border-b border-gray-800 pb-6">
                 <div>
@@ -176,7 +192,6 @@ export default function Dashboard() {
                 </button>
             </div>
 
-            {/* Grilla de los 4 Locales */}
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
                 {localesGaleria.map((local) => {
                     const turno = obtenerTurnoLocal(local.id);
@@ -188,7 +203,6 @@ export default function Dashboard() {
                         <div
                             key={local.id}
                             className="bg-gray-800 rounded-2xl border border-gray-700 overflow-hidden shadow-xl flex flex-col">
-                            {/* Cabecera de la Tarjeta */}
                             <div className={`${local.color} p-4 flex justify-between items-center`}>
                                 <h3 className="font-bold text-xl">{local.nombre}</h3>
 
@@ -197,7 +211,6 @@ export default function Dashboard() {
                                         <span className="bg-green-500/20 text-green-100 text-xs font-bold px-3 py-1 rounded-full border border-green-500/30">
                                             ABIERTO
                                         </span>
-                                        {/* 👇 Botón para saltar directo a vender a ESTE local */}
                                         <button
                                             onClick={() => navigate('/pos', { state: { localDestino: local.id } })}
                                             className="bg-green-600 hover:bg-green-700 text-white text-xs font-bold px-3 py-1 rounded-full shadow transition-colors">
@@ -225,7 +238,6 @@ export default function Dashboard() {
                                         <span className="bg-gray-900/50 text-gray-300 text-xs font-bold px-3 py-1 rounded-full">
                                             SIN ABRIR
                                         </span>
-                                        {/* 👇 Botón para abrir la caja desde el Admin */}
                                         <button
                                             onClick={() => handleAperturaDesdeDashboard(local)}
                                             className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-3 py-1 rounded-full shadow transition-colors">
@@ -235,7 +247,6 @@ export default function Dashboard() {
                                 )}
                             </div>
 
-                            {/* Cuerpo de la Tarjeta (Datos Financieros) */}
                             <div className="p-6 flex-1 flex flex-col justify-center">
                                 {!turno ? (
                                     <div className="text-center text-gray-500">
@@ -266,7 +277,6 @@ export default function Dashboard() {
                                                 </p>
                                             </div>
                                         )}
-                                        {/* Si ya hicieron el Cierre Z, mostramos el resultado */}
                                         {estaCerrado && (
                                             <div
                                                 className={`mt-4 p-3 rounded-lg border ${Number(turno.diferencia) === 0 ? 'bg-green-500/10 border-green-500/30' : 'bg-red-500/10 border-red-500/30'}`}>

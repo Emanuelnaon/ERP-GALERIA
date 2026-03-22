@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { supabase } from "../services/supabase";
 import { HandCoins, X } from "lucide-react";
 
-export default function GastoModal({ turnoId, onClose, onGastoRegistrado }) {
+export default function GastoModal({ turnoId, onClose, onGastoRegistrado, maximoPermitido }) {
     const [monto, setMonto] = useState("");
     const [descripcion, setDescripcion] = useState("");
     const [loading, setLoading] = useState(false);
@@ -29,6 +29,13 @@ export default function GastoModal({ turnoId, onClose, onGastoRegistrado }) {
                         descripcion: descripcion,
                     },
                 ]);
+                const montoRetiro = parseFloat(monto);
+
+                if (montoRetiro > maximoPermitido) {
+                    alert(`❌ ERROR: No podés retirar $${montoRetiro}. Solo tenés $${maximoPermitido} en la caja.`);
+                    setLoading(false); // si tenés un estado de carga
+                    return; // Cortamos la función para que no vaya a Supabase
+                }
 
             if (errorGasto) throw errorGasto;
 
