@@ -120,6 +120,7 @@ export default function Login() {
                                 <Mail className="absolute left-3 top-3.5 h-5 w-5 text-gray-500" />
                                 <input
                                     type="text"
+                                    autoComplete='username'
                                     value={identificacion}
                                     onChange={(e) => setIdentificacion(e.target.value)}
                                     className="w-full py-3 pl-10 pr-3 rounded bg-gray-700 text-white border border-gray-600 focus:outline-none focus:border-blue-500"
