@@ -9,6 +9,15 @@ const LOCALES = [
     { id: 4, nombre: 'Regalería' },
 ];
 
+// 👇 EL CEREBRO DEL IMPORTADOR: Diccionario de sinónimos 👇
+const DICCIONARIO_COLUMNAS = {
+    nombre: ['nombre', 'prenda', 'articulo', 'art', 'descripción', 'descripcion', 'detalle', 'producto'],
+    precio: ['precio', 'precio x mayor', 'costo', 'p.unit', 'importe', 'valor'],
+    stock: ['stock', 'cant', 'cantidad', 'disponible', 'unidades'],
+    codigo: ['codigo', 'códig', 'cod', 'ean', 'sku', 'barra'],
+    talle: ['talle', 'talles', 'size', 'tamaño', 'medida'],
+};
+
 export default function ImportadorMasivo() {
     const [cargando, setCargando] = useState(false);
     const [localDestino, setLocalDestino] = useState(1);
@@ -38,17 +47,25 @@ export default function ImportadorMasivo() {
                 return;
             }
 
-            // Asumimos que el usuario hizo caso y la fila 0 son los títulos
+            // Normalizamos los títulos de la primera fila
             const titulos = lineas[0].split(separador).map((t) => t.trim().toLowerCase().replace(/"/g, ''));
 
-            // Buscamos en qué posición (índice) está cada columna clave
-            const idxNombre = titulos.findIndex((t) => t.includes('nombre'));
-            const idxPrecio = titulos.findIndex((t) => t.includes('precio'));
-            const idxStock = titulos.findIndex((t) => t.includes('stock'));
-            const idxCodigo = titulos.findIndex((t) => t.includes('codigo') || t.includes('códig'));
+            // 👇 FUNCIÓN CAZADORA: Busca si alguna columna coincide con nuestro diccionario
+            const encontrarIndice = (sinonimos) => {
+                return titulos.findIndex((tituloExcel) => sinonimos.some((sinonimo) => tituloExcel.includes(sinonimo)));
+            };
+
+            // Buscamos las columnas usando la inteligencia del diccionario
+            const idxNombre = encontrarIndice(DICCIONARIO_COLUMNAS.nombre);
+            const idxPrecio = encontrarIndice(DICCIONARIO_COLUMNAS.precio);
+            const idxStock = encontrarIndice(DICCIONARIO_COLUMNAS.stock);
+            const idxCodigo = encontrarIndice(DICCIONARIO_COLUMNAS.codigo);
+            const idxTalle = encontrarIndice(DICCIONARIO_COLUMNAS.talle);
 
             if (idxNombre === -1 || idxPrecio === -1) {
-                setResultado("Error crítico: No se encontraron las columnas 'nombre' o 'precio' en la primera fila.");
+                setResultado(
+                    "Error crítico: No se detectaron columnas válidas para 'Nombre' o 'Precio'. Verificá los títulos de tu archivo.",
+                );
                 setCargando(false);
                 return;
             }
@@ -59,15 +76,17 @@ export default function ImportadorMasivo() {
 
             // Procesamos desde la línea 1 (salteando los títulos)
             for (let i = 1; i < lineas.length; i++) {
-                // Separamos por el separador, ignorando si está dentro de comillas simples
                 const celdas = lineas[i]
                     .split(separador)
                     .map((c) => c.trim().replace(/^"|"$/g, '').replace(/""/g, '"'));
 
                 const nombreRaw = celdas[idxNombre];
                 const precioRaw = celdas[idxPrecio];
+
+                // Si la columna existe extraemos el valor, sino null/0
                 const stockRaw = idxStock !== -1 ? celdas[idxStock] : '0';
                 const codigoRaw = idxCodigo !== -1 ? celdas[idxCodigo] : null;
+                const talleRaw = idxTalle !== -1 ? celdas[idxTalle] : null;
 
                 if (!nombreRaw || !precioRaw) {
                     fallados++;
@@ -79,11 +98,14 @@ export default function ImportadorMasivo() {
                     // Limpieza de moneda y formato
                     const precioLimpio = precioRaw.replace(/[^0-9,-]+/g, '').replace(',', '.');
                     const precioFinal = Number(precioLimpio);
-                    const stockFinal = Number(stockRaw || 0);
+
+                    // Limpieza de Stock (Por si viene con letras como "10 un.")
+                    const stockLimpio = stockRaw.replace(/[^0-9]+/g, '');
+                    const stockFinal = Number(stockLimpio) || 0; // Si falla, queda en 0 por defecto
 
                     if (isNaN(precioFinal)) throw new Error(`Precio inválido: ${precioRaw}`);
 
-                    // 1. Inyectar Producto (usando el Local seleccionado en pantalla)
+                    // 1. Inyectar Producto
                     const { data: pData, error: pErr } = await supabase
                         .from('productos')
                         .insert([{ nombre: nombreRaw, precio_base: precioFinal, local_id: localDestino }])
@@ -91,12 +113,14 @@ export default function ImportadorMasivo() {
                         .single();
                     if (pErr) throw pErr;
 
-                    // 2. Inyectar Variante
+                    // 2. Inyectar Variante (AHORA CON TALLE Y STOCK SEGURO)
                     const { error: vErr } = await supabase.from('variantes').insert([
                         {
                             producto_id: pData.id,
+                            local_id: localDestino, // Buena práctica vincular la variante al local también
                             stock_actual: stockFinal,
                             codigo_barras: codigoRaw,
+                            talle: talleRaw,
                         },
                     ]);
                     if (vErr) throw vErr;
@@ -139,7 +163,7 @@ export default function ImportadorMasivo() {
                 </select>
             </div>
 
-            {/* 👇 MANUAL DE INSTRUCCIONES PARA EL DUEÑO 👇 */}
+            {/* 👇 MANUAL DE INSTRUCCIONES ACTUALIZADO 👇 */}
             <div className="bg-blue-900/20 border border-blue-800 p-5 rounded-xl mb-6">
                 <h4 className="font-bold text-blue-400 flex items-center gap-2 mb-3">
                     <Info size={18} /> ¿Cómo preparar tu archivo antes de subirlo?
@@ -147,17 +171,12 @@ export default function ImportadorMasivo() {
                 <ol className="list-decimal list-inside text-sm text-gray-300 space-y-2 marker:text-blue-500 marker:font-bold">
                     <li>
                         Abrí tu lista en Excel. <b>Eliminá cualquier fila vacía, logo o membrete</b> que esté arriba de
-                        todo.
+                        todo. La Fila 1 tiene que contener los títulos.
                     </li>
                     <li>
-                        Asegurate de que <b>la Fila 1 tenga los títulos</b> de las columnas.
-                    </li>
-                    <li>
-                        Cambiá los títulos para que digan exactamente estas palabras: <b>nombre</b>, <b>precio</b>.{' '}
-                        <i>
-                            (Opcionales: <b>stock</b>, <b>codigo_barras</b>)
-                        </i>
-                        .
+                        El sistema es inteligente y detectará automáticamente columnas llamadas:{' '}
+                        <b className="text-white">"prenda", "art", "detalle", "cant", "precio x mayor"</b>, etc. ¡Ya no
+                        hace falta renombrarlas a mano!
                     </li>
                     <li>
                         Andá a "Archivo" &gt; "Guardar como..." y elegí el formato <b>CSV (delimitado por comas)</b> o{' '}
