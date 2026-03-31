@@ -9,13 +9,33 @@ const LOCALES = [
     { id: 4, nombre: 'Regalería' },
 ];
 
-// 👇 CEREBRO 2.0: Más específico para no pisarse entre sí 👇
+// 👇 DICCIONARIO MEJORADO: Sin palabras cruzadas 👇
 const DICCIONARIO_COLUMNAS = {
-    nombre: ['nombre', 'prenda', 'descripcion', 'detalle'], // Quitamos 'producto'
-    precio: ['precio', 'costo', 'valor', 'importe'],
+    codigo: ['cod', 'codigo', 'ean', 'sku', 'barra', 'art', 'articulo', 'referencia'],
+    precio: ['precio', 'costo', 'valor', 'importe', 'mayor', 'menor'],
     stock: ['stock', 'cant', 'cantidad', 'disponible', 'unidades'],
-    codigo: ['codigo', 'cod', 'ean', 'sku', 'barra', 'art', 'articulo'], // 'art' suele ser el SKU numérico
     talle: ['talle', 'talles', 'size', 'tamaño', 'medida'],
+    nombre: ['nombre', 'prenda', 'descripcion', 'detalle', 'producto', 'titulo', 'modelo'],
+};
+
+// 👇 PARSER CSV ROBUSTO (Evita que las comas dentro de un texto rompan las columnas) 👇
+const parseCSVLine = (line, separator) => {
+    const result = [];
+    let current = '';
+    let inQuotes = false;
+    for (let i = 0; i < line.length; i++) {
+        const char = line[i];
+        if (char === '"') {
+            inQuotes = !inQuotes;
+        } else if (char === separator && !inQuotes) {
+            result.push(current.trim());
+            current = '';
+        } else {
+            current += char;
+        }
+    }
+    result.push(current.trim());
+    return result.map((c) => c.replace(/^"|"$/g, '').replace(/""/g, '"'));
 };
 
 export default function ImportadorMasivo() {
@@ -34,12 +54,13 @@ export default function ImportadorMasivo() {
 
         const lector = new FileReader();
         lector.onload = async (evento) => {
-            const texto = evento.target.result;
-            // Detectar separador
-            const primeraLinea = texto.split('\n')[0];
+            // 1. Limpiamos la "basura invisible" que deja Excel (BOM)
+            const textoLimpio = evento.target.result.replace(/^\uFEFF/, '');
+
+            const primeraLinea = textoLimpio.split('\n')[0];
             const separador = primeraLinea.includes(';') ? ';' : ',';
 
-            const lineas = texto.split('\n').filter((linea) => linea.trim() !== '');
+            const lineas = textoLimpio.split('\n').filter((linea) => linea.trim() !== '');
 
             if (lineas.length < 2) {
                 setResultado('Error: El archivo está vacío o no tiene el formato correcto.');
@@ -47,40 +68,38 @@ export default function ImportadorMasivo() {
                 return;
             }
 
-            // 👇 NORMALIZACIÓN 2.0: Quitamos comillas y TILDES (código -> codigo)
-            const titulos = lineas[0].split(separador).map(
-                (t) =>
-                    t
-                        .trim()
-                        .toLowerCase()
-                        .replace(/"/g, '')
-                        .normalize('NFD')
-                        .replace(/[\u0300-\u036f]/g, ''), // Quita tildes
+            // Normalizamos los títulos (minúsculas y sin tildes)
+            const titulos = parseCSVLine(lineas[0], separador).map((t) =>
+                t
+                    .toLowerCase()
+                    .normalize('NFD')
+                    .replace(/[\u0300-\u036f]/g, ''),
             );
 
-            // 👇 BUSCADOR INTELIGENTE EN 2 PASOS 👇
-            const encontrarIndice = (sinonimos) => {
-                // Paso 1: Búsqueda exacta (ej: la columna se llama exactamente "nombre")
-                let idx = titulos.findIndex((t) => sinonimos.includes(t));
+            // 👇 ASIGNACIÓN INTELIGENTE CON ORDEN DE PRIORIDAD 👇
+            let indices = { codigo: -1, precio: -1, stock: -1, talle: -1, nombre: -1 };
+            let columnasDisponibles = titulos.map((_, i) => i); // Ej: [0, 1, 2, 3, 4]
 
-                // Paso 2: Búsqueda por palabra suelta (ej: "codigo del producto" o "precio_base")
-                if (idx === -1) {
-                    idx = titulos.findIndex((t) => {
-                        const palabras = t.split(/[\s_.-]+/); // Corta por espacios o guiones bajos
-                        return sinonimos.some((s) => palabras.includes(s));
-                    });
+            const buscarYAsignar = (clave, sinonimos) => {
+                for (let idx of columnasDisponibles) {
+                    const titulo = titulos[idx];
+                    if (sinonimos.some((s) => titulo.includes(s))) {
+                        indices[clave] = idx;
+                        // Sacamos esta columna de la lista para que otra no se la robe
+                        columnasDisponibles = columnasDisponibles.filter((i) => i !== idx);
+                        return;
+                    }
                 }
-                return idx;
             };
 
-            // Buscamos los índices
-            const idxNombre = encontrarIndice(DICCIONARIO_COLUMNAS.nombre);
-            const idxPrecio = encontrarIndice(DICCIONARIO_COLUMNAS.precio);
-            const idxStock = encontrarIndice(DICCIONARIO_COLUMNAS.stock);
-            const idxCodigo = encontrarIndice(DICCIONARIO_COLUMNAS.codigo);
-            const idxTalle = encontrarIndice(DICCIONARIO_COLUMNAS.talle);
+            // EL ORDEN ES CLAVE: Buscamos Código primero, para que Nombre no se confunda con "Código del Producto"
+            buscarYAsignar('codigo', DICCIONARIO_COLUMNAS.codigo);
+            buscarYAsignar('precio', DICCIONARIO_COLUMNAS.precio);
+            buscarYAsignar('stock', DICCIONARIO_COLUMNAS.stock);
+            buscarYAsignar('talle', DICCIONARIO_COLUMNAS.talle);
+            buscarYAsignar('nombre', DICCIONARIO_COLUMNAS.nombre);
 
-            if (idxNombre === -1 || idxPrecio === -1) {
+            if (indices.nombre === -1 || indices.precio === -1) {
                 setResultado(
                     "Error crítico: No se detectaron columnas válidas para 'Nombre' o 'Precio'. Verificá los títulos de tu archivo.",
                 );
@@ -88,23 +107,23 @@ export default function ImportadorMasivo() {
                 return;
             }
 
+            // 👇 EL ESCUDO ANTI-REACT PARA EL LOCAL 👇
+            // Leemos el valor directo del HTML para que no haya errores de memoria
+            const localElegidoReal = Number(document.getElementById('selector-local').value);
+
             let exitosos = 0;
             let fallados = 0;
             let detalles = [];
 
-            // Procesamos desde la línea 1 (salteando los títulos)
+            // Procesamos los datos
             for (let i = 1; i < lineas.length; i++) {
-                const celdas = lineas[i]
-                    .split(separador)
-                    .map((c) => c.trim().replace(/^"|"$/g, '').replace(/""/g, '"'));
+                const celdas = parseCSVLine(lineas[i], separador);
 
-                const nombreRaw = celdas[idxNombre];
-                const precioRaw = celdas[idxPrecio];
-
-                // Si la columna existe extraemos el valor, sino null/0
-                const stockRaw = idxStock !== -1 ? celdas[idxStock] : '0';
-                const codigoRaw = idxCodigo !== -1 ? celdas[idxCodigo] : null;
-                const talleRaw = idxTalle !== -1 ? celdas[idxTalle] : null;
+                const nombreRaw = indices.nombre !== -1 ? celdas[indices.nombre] : null;
+                const precioRaw = indices.precio !== -1 ? celdas[indices.precio] : null;
+                const stockRaw = indices.stock !== -1 ? celdas[indices.stock] : '0';
+                const codigoRaw = indices.codigo !== -1 ? celdas[indices.codigo] : null;
+                const talleRaw = indices.talle !== -1 ? celdas[indices.talle] : null;
 
                 if (!nombreRaw || !precioRaw) {
                     fallados++;
@@ -117,25 +136,25 @@ export default function ImportadorMasivo() {
                     const precioLimpio = precioRaw.replace(/[^0-9,-]+/g, '').replace(',', '.');
                     const precioFinal = Number(precioLimpio);
 
-                    // Limpieza de Stock
+                    // Limpieza estricta de Stock (Saca textos como "un." o "pares")
                     const stockLimpio = stockRaw.replace(/[^0-9]+/g, '');
                     const stockFinal = Number(stockLimpio) || 0;
 
                     if (isNaN(precioFinal)) throw new Error(`Precio inválido: ${precioRaw}`);
 
-                    // 1. Inyectar Producto
+                    // 1. Inyectar Producto (Con el Local Real)
                     const { data: pData, error: pErr } = await supabase
                         .from('productos')
-                        .insert([{ nombre: nombreRaw, precio_base: precioFinal, local_id: localDestino }])
+                        .insert([{ nombre: nombreRaw, precio_base: precioFinal, local_id: localElegidoReal }])
                         .select('id')
                         .single();
                     if (pErr) throw pErr;
 
-                    // 2. Inyectar Variante
+                    // 2. Inyectar Variante (Con Talle, Stock y el Local Real)
                     const { error: vErr } = await supabase.from('variantes').insert([
                         {
                             producto_id: pData.id,
-                            local_id: localDestino,
+                            local_id: localElegidoReal,
                             stock_actual: stockFinal,
                             codigo_barras: codigoRaw,
                             talle: talleRaw,
@@ -153,7 +172,7 @@ export default function ImportadorMasivo() {
             setResultado(`Proceso finalizado. Guardados: ${exitosos} | Ignorados/Error: ${fallados}`);
             setErroresDetalle(detalles);
             setCargando(false);
-            e.target.value = ''; // Resetea el input file
+            e.target.value = ''; // Resetea el input para poder subir el mismo archivo si hubo error
         };
         lector.readAsText(archivo);
     };
@@ -164,12 +183,13 @@ export default function ImportadorMasivo() {
                 <UploadCloud className="text-blue-400" /> Carga Masiva de Catálogo
             </h3>
 
-            {/* 👇 SELECTOR GLOBAL DE LOCAL 👇 */}
+            {/* 👇 SELECTOR GLOBAL DE LOCAL (Ahora con ID para lectura directa) 👇 */}
             <div className="bg-gray-900 p-4 rounded-xl border border-gray-700 mb-6">
                 <label className="text-gray-300 font-bold mb-2 flex items-center gap-2">
                     <Store size={18} className="text-blue-400" /> ¿A qué local vas a importar este Excel?
                 </label>
                 <select
+                    id="selector-local"
                     className="w-full bg-gray-800 text-white p-3 rounded-lg border border-gray-600 focus:border-blue-500 outline-none font-bold"
                     value={localDestino}
                     onChange={(e) => setLocalDestino(Number(e.target.value))}>
@@ -209,6 +229,9 @@ export default function ImportadorMasivo() {
                     id="archivo-csv"
                     disabled={cargando}
                     className="hidden"
+                    onClick={(e) => {
+                        e.target.value = null;
+                    }} // Truco para permitir subir el mismo archivo 2 veces seguidas
                 />
                 <label
                     htmlFor="archivo-csv"
