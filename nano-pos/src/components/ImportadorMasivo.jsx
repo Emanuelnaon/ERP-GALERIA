@@ -9,12 +9,12 @@ const LOCALES = [
     { id: 4, nombre: 'Regalería' },
 ];
 
-// 👇 EL CEREBRO DEL IMPORTADOR: Diccionario de sinónimos 👇
+// 👇 CEREBRO 2.0: Más específico para no pisarse entre sí 👇
 const DICCIONARIO_COLUMNAS = {
-    nombre: ['nombre', 'prenda', 'articulo', 'art', 'descripción', 'descripcion', 'detalle', 'producto'],
-    precio: ['precio', 'precio x mayor', 'costo', 'p.unit', 'importe', 'valor'],
+    nombre: ['nombre', 'prenda', 'descripcion', 'detalle'], // Quitamos 'producto'
+    precio: ['precio', 'costo', 'valor', 'importe'],
     stock: ['stock', 'cant', 'cantidad', 'disponible', 'unidades'],
-    codigo: ['codigo', 'códig', 'cod', 'ean', 'sku', 'barra'],
+    codigo: ['codigo', 'cod', 'ean', 'sku', 'barra', 'art', 'articulo'], // 'art' suele ser el SKU numérico
     talle: ['talle', 'talles', 'size', 'tamaño', 'medida'],
 };
 
@@ -47,15 +47,33 @@ export default function ImportadorMasivo() {
                 return;
             }
 
-            // Normalizamos los títulos de la primera fila
-            const titulos = lineas[0].split(separador).map((t) => t.trim().toLowerCase().replace(/"/g, ''));
+            // 👇 NORMALIZACIÓN 2.0: Quitamos comillas y TILDES (código -> codigo)
+            const titulos = lineas[0].split(separador).map(
+                (t) =>
+                    t
+                        .trim()
+                        .toLowerCase()
+                        .replace(/"/g, '')
+                        .normalize('NFD')
+                        .replace(/[\u0300-\u036f]/g, ''), // Quita tildes
+            );
 
-            // 👇 FUNCIÓN CAZADORA: Busca si alguna columna coincide con nuestro diccionario
+            // 👇 BUSCADOR INTELIGENTE EN 2 PASOS 👇
             const encontrarIndice = (sinonimos) => {
-                return titulos.findIndex((tituloExcel) => sinonimos.some((sinonimo) => tituloExcel.includes(sinonimo)));
+                // Paso 1: Búsqueda exacta (ej: la columna se llama exactamente "nombre")
+                let idx = titulos.findIndex((t) => sinonimos.includes(t));
+
+                // Paso 2: Búsqueda por palabra suelta (ej: "codigo del producto" o "precio_base")
+                if (idx === -1) {
+                    idx = titulos.findIndex((t) => {
+                        const palabras = t.split(/[\s_.-]+/); // Corta por espacios o guiones bajos
+                        return sinonimos.some((s) => palabras.includes(s));
+                    });
+                }
+                return idx;
             };
 
-            // Buscamos las columnas usando la inteligencia del diccionario
+            // Buscamos los índices
             const idxNombre = encontrarIndice(DICCIONARIO_COLUMNAS.nombre);
             const idxPrecio = encontrarIndice(DICCIONARIO_COLUMNAS.precio);
             const idxStock = encontrarIndice(DICCIONARIO_COLUMNAS.stock);
@@ -99,9 +117,9 @@ export default function ImportadorMasivo() {
                     const precioLimpio = precioRaw.replace(/[^0-9,-]+/g, '').replace(',', '.');
                     const precioFinal = Number(precioLimpio);
 
-                    // Limpieza de Stock (Por si viene con letras como "10 un.")
+                    // Limpieza de Stock
                     const stockLimpio = stockRaw.replace(/[^0-9]+/g, '');
-                    const stockFinal = Number(stockLimpio) || 0; // Si falla, queda en 0 por defecto
+                    const stockFinal = Number(stockLimpio) || 0;
 
                     if (isNaN(precioFinal)) throw new Error(`Precio inválido: ${precioRaw}`);
 
@@ -113,11 +131,11 @@ export default function ImportadorMasivo() {
                         .single();
                     if (pErr) throw pErr;
 
-                    // 2. Inyectar Variante (AHORA CON TALLE Y STOCK SEGURO)
+                    // 2. Inyectar Variante
                     const { error: vErr } = await supabase.from('variantes').insert([
                         {
                             producto_id: pData.id,
-                            local_id: localDestino, // Buena práctica vincular la variante al local también
+                            local_id: localDestino,
                             stock_actual: stockFinal,
                             codigo_barras: codigoRaw,
                             talle: talleRaw,
@@ -163,7 +181,6 @@ export default function ImportadorMasivo() {
                 </select>
             </div>
 
-            {/* 👇 MANUAL DE INSTRUCCIONES ACTUALIZADO 👇 */}
             <div className="bg-blue-900/20 border border-blue-800 p-5 rounded-xl mb-6">
                 <h4 className="font-bold text-blue-400 flex items-center gap-2 mb-3">
                     <Info size={18} /> ¿Cómo preparar tu archivo antes de subirlo?
@@ -175,8 +192,7 @@ export default function ImportadorMasivo() {
                     </li>
                     <li>
                         El sistema es inteligente y detectará automáticamente columnas llamadas:{' '}
-                        <b className="text-white">"prenda", "art", "detalle", "cant", "precio x mayor"</b>, etc. ¡Ya no
-                        hace falta renombrarlas a mano!
+                        <b className="text-white">"prenda", "art", "detalle", "cant", "precio x mayor"</b>, etc.
                     </li>
                     <li>
                         Andá a "Archivo" &gt; "Guardar como..." y elegí el formato <b>CSV (delimitado por comas)</b> o{' '}
