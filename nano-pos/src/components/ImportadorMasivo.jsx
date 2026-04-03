@@ -128,52 +128,72 @@ export default function ImportadorMasivo() {
                     continue;
                 }
 
-                try {
-                    // Limpieza estricta de precio
-                    const precioLimpio = precioRaw.replace(/[^0-9,-]+/g, '').replace(',', '.');
-                    const precioFinal = Number(precioLimpio);
+             try {
+                 const precioLimpio = precioRaw.replace(/[^0-9,-]+/g, '').replace(',', '.');
+                 const precioFinal = Number(precioLimpio);
 
-                    if (isNaN(precioFinal) || precioFinal <= 0) {
-                        throw new Error(`El precio ingresado no es un número válido: "${precioRaw}"`);
-                    }
+                 if (isNaN(precioFinal) || precioFinal <= 0) {
+                     throw new Error(`Precio inválido: "${precioRaw}"`);
+                 }
 
-                    // Limpieza estricta de stock
-                    const stockLimpio = (stockRaw || '0').replace(/[^0-9]+/g, '');
-                    const stockFinal = Number(stockLimpio) || 0;
+                 const stockLimpio = (stockRaw || '0').replace(/[^0-9]+/g, '');
+                 const stockFinal = Number(stockLimpio) || 0;
+                 const nombreLimpio = nombreRaw.trim();
+                 const localIdNum = Number(config.local_id);
 
-                    // 1. Inyectar Producto
-                    const { data: pData, error: pErr } = await supabase
-                        .from('productos')
-                        .insert([
-                            {
-                                nombre: nombreRaw.trim(),
-                                precio_base: precioFinal,
-                                local_id: Number(config.local_id),
-                            },
-                        ])
-                        .select('id')
-                        .single();
+                 // 👇 1. EL PATRÓN "BUSCAR O CREAR" PRODUCTO 👇
+                 let productoId;
 
-                    if (pErr) throw pErr;
+                 // A. Buscamos si ya existe exactamente ese nombre en ese local
+                 const { data: productoExistente, error: errorBusqueda } = await supabase
+                     .from('productos')
+                     .select('id')
+                     .eq('nombre', nombreLimpio)
+                     .eq('local_id', localIdNum)
+                     .maybeSingle(); // 🌟 Magia: devuelve el producto o null, sin romper
 
-                    // 2. Inyectar Variante
-                    const { error: vErr } = await supabase.from('variantes').insert([
-                        {
-                            producto_id: pData.id,
-                            local_id: Number(config.local_id),
-                            stock_actual: stockFinal,
-                            codigo_barras: codigoRaw ? codigoRaw.trim() : null,
-                            talle: talleRaw ? talleRaw.trim() : null,
-                        },
-                    ]);
+                 if (errorBusqueda) throw errorBusqueda;
 
-                    if (vErr) throw vErr;
+                 if (productoExistente) {
+                     // ¡Ya existe! Reciclamos su ID para no duplicar
+                     productoId = productoExistente.id;
+                 } else {
+                     // No existe, es un producto nuevo. Lo creamos.
+                     const { data: productoNuevo, error: pErr } = await supabase
+                         .from('productos')
+                         .insert([
+                             {
+                                 nombre: nombreLimpio,
+                                 precio_base: precioFinal,
+                                 local_id: localIdNum,
+                             },
+                         ])
+                         .select('id')
+                         .single();
 
-                    exitosos++;
-                } catch (error) {
-                    fallados++;
-                    detalles.push(`Fila Excel ${i + 1} (${nombreRaw}): ${error.message}`);
-                }
+                     if (pErr) throw pErr;
+                     productoId = productoNuevo.id;
+                 }
+
+                 // 👇 2. INYECTAR LA VARIANTE (Talle/Color/Código) 👇
+                 // Siempre atado al productoId que encontramos o creamos en el paso anterior
+                 const { error: vErr } = await supabase.from('variantes').insert([
+                     {
+                         producto_id: productoId,
+                         local_id: localIdNum,
+                         stock_actual: stockFinal,
+                         codigo_barras: codigoRaw ? codigoRaw.trim() : null,
+                         talle: talleRaw ? talleRaw.trim() : null,
+                     },
+                 ]);
+
+                 if (vErr) throw vErr;
+
+                 exitosos++;
+             } catch (error) {
+                 fallados++;
+                 detalles.push(`Fila Excel ${i + 1} (${nombreRaw}): ${error.message}`);
+             }
             }
 
             setResultado(`Proceso finalizado. Importados: ${exitosos} | Fallidos: ${fallados}`);
