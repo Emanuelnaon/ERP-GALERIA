@@ -1,3 +1,43 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* 👇 ACÁ EMPIEZAN TUS ESTILOS PARA LA IMPRESORA TÉRMICA 👇 */
+@media print {
+
+   /* 1. Oculta el fondo de la PWA */
+   body {
+      background-color: white !important;
+   }
+
+   /* 2. Oculta todo por defecto */
+   #root>* {
+      display: none !important;
+   }
+
+   /* 3. Muestra el modal del ticket */
+   .impresion-ticket {
+      display: block !important;
+      position: absolute !important;
+      left: 0 !important;
+      top: 0 !important;
+      width: 100% !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      background: white !important;
+      color: black !important;
+   }
+
+   /* 4. LA MAGIA: Obliga a TODOS los hijos a soltar el freno del scroll */
+   .impresion-ticket,
+   .impresion-ticket * {
+      height: auto !important;
+      max-height: none !important;
+      overflow: visible !important;
+   }
+
+   /* 5. Borra la barrita gris */
+   ::-webkit-scrollbar {
+      display: none !important;
+   }
+}
