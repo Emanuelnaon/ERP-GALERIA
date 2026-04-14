@@ -73,8 +73,8 @@ export default function Login() {
     };
 
     return (
-        <div className="flex min-h-screen items-center justify-center bg-gray-950 px-4 relative">
-            {/* 👇 Botón de configuración oculto a simple vista (Arriba a la derecha) */}
+        /* 👇 MAGIA 1: min-h-[100dvh] en lugar de min-h-screen y agregamos py-6 por si la pantalla es enana */
+        <div className="flex min-h-[100dvh] items-center justify-center bg-gray-950 px-4 py-6 relative">
             <button
                 type="button"
                 onClick={handleConfigurarDispositivo}
@@ -83,72 +83,78 @@ export default function Login() {
                 <Settings size={28} />
             </button>
 
-            <div className="w-full max-w-sm space-y-8 bg-gray-900 p-8 rounded-2xl border border-gray-800 shadow-2xl">
-                {/* Encabezado */}
+            {/* 👇 MAGIA 2: p-6 para móvil, p-8 para PC. space-y-6 para móvil, space-y-8 para PC */}
+            <div className="w-full max-w-sm space-y-6 md:space-y-8 bg-gray-900 p-6 md:p-8 rounded-2xl border border-gray-800 shadow-2xl">
                 <div className="text-center">
-                    <h1 className="text-3xl font-bold tracking-tight text-white">NANO POS</h1>
-                    <p className="mt-2 text-sm text-gray-400">Ingresa tus credenciales de vendedor</p>
+                    {/* 👇 MAGIA 3: text-2xl en móvil, text-3xl en PC */}
+                    <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-white">NANO POS</h1>
+                    <p className="mt-1 md:mt-2 text-xs md:text-sm text-gray-400">
+                        Ingresa tus credenciales de vendedor
+                    </p>
                 </div>
 
-                {/* 👇 INDICADOR VISUAL: Si la terminal está bautizada, lo mostramos */}
                 {dispositivoLocalId && (
-                    <div className="flex items-center justify-center gap-2 bg-indigo-900/30 text-indigo-400 p-3 rounded-xl border border-indigo-800/50">
-                        <MonitorSmartphone size={18} />
-                        <span className="text-sm font-medium">
+                    <div className="flex items-center justify-center gap-2 bg-indigo-900/30 text-indigo-400 p-2.5 md:p-3 rounded-xl border border-indigo-800/50">
+                        <MonitorSmartphone size={16} className="md:w-5 md:h-5" />
+                        <span className="text-xs md:text-sm font-medium">
                             Terminal de <b>Local {dispositivoLocalId}</b>
                         </span>
                     </div>
                 )}
 
-                {/* Mensaje de Error */}
                 {errorMsg && (
-                    <div className="bg-red-900/50 border border-red-800 text-red-200 text-sm p-3 rounded text-center">
+                    <div className="bg-red-900/50 border border-red-800 text-red-200 text-xs md:text-sm p-3 rounded text-center">
                         {errorMsg}
                     </div>
                 )}
 
-                {/* Formulario */}
-                <form onSubmit={handleLogin} className="mt-8 space-y-6">
+                <form onSubmit={handleLogin} className="mt-6 md:mt-8 space-y-5 md:space-y-6">
                     <div className="space-y-4 rounded-md shadow-sm">
-                        {/* Input DNI / Email */}
-                        <div className="relative mb-4">
-                            {/* Le sacamos el absolute al ícono para que no se superponga con el label, o lo dejamos estético */}
-                            <label className="block text-gray-300 text-sm font-bold mb-2">
+                        <div className="relative mb-3 md:mb-4">
+                            <label className="block text-gray-300 text-xs md:text-sm font-bold mb-1.5 md:mb-2">
                                 DNI o Correo Electrónico
                             </label>
                             <div className="relative">
-                                <Mail className="absolute left-3 top-3.5 h-5 w-5 text-gray-500" />
+                                {/* Ajuste del ícono para que quede centrado con el nuevo alto del input */}
+                                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 md:h-5 md:w-5 text-gray-500" />
                                 <input
                                     type="text"
-                                    autoComplete='username'
+                                    autoComplete="username"
                                     value={identificacion}
                                     onChange={(e) => setIdentificacion(e.target.value)}
-                                    className="w-full py-3 pl-10 pr-3 rounded bg-gray-700 text-white border border-gray-600 focus:outline-none focus:border-blue-500"
+                                    /* 👇 MAGIA 4: py-2.5 en móvil, py-3 en PC. Letra más chica en móvil */
+                                    className="w-full py-2.5 md:py-3 pl-9 md:pl-10 pr-3 rounded bg-gray-700 text-white border border-gray-600 focus:outline-none focus:border-blue-500 text-sm md:text-base"
                                     placeholder="Ej: 35123456 o admin@galeria.com"
                                     required
                                 />
                             </div>
                         </div>
 
-                        {/* Input Contraseña */}
                         <div className="relative">
-                            <Lock className="absolute left-3 top-3 h-5 w-5 text-gray-500" />
-                            <input
-                                type="password"
-                                required
-                                className="block w-full rounded-md border-0 bg-gray-800 py-3 pl-10 text-white placeholder:text-gray-500 focus:ring-2 focus:ring-blue-600 sm:text-sm"
-                                placeholder="••••••••"
-                                autoComplete='current-password'
-                                value={password}
-                                onChange={(e) => setPassword(e.target.value)}
-                            />
+                            <label className="block text-gray-300 text-xs md:text-sm font-bold mb-1.5 md:mb-2">
+                                Contraseña
+                            </label>
+                            <div className="relative">
+                                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 md:h-5 md:w-5 text-gray-500" />
+                                <input
+                                    type="password"
+                                    required
+                                    /* 👇 Igual acá: py-2.5 y text-sm para móvil */
+                                    className="w-full py-2.5 md:py-3 pl-9 md:pl-10 pr-3 rounded bg-gray-700 text-white border border-gray-600 focus:outline-none focus:border-blue-500 text-sm md:text-base"
+                                    placeholder="••••••••"
+                                    autoComplete="current-password"
+                                    value={password}
+                                    onChange={(e) => setPassword(e.target.value)}
+                                />
+                            </div>
                         </div>
                     </div>
 
                     <button
                         disabled={loading}
                         type="submit"
-                        className="group relative flex w-full justify-center rounded-md bg-blue-600 px-3 py-3 text-sm font-semibold text-white hover:bg-blue-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all">
+                        /* 👇 py-2.5 en móvil, py-3 en PC */
+                        className="group relative flex w-full justify-center rounded-md bg-blue-600 px-3 py-2.5 md:py-3 text-sm md:text-base font-semibold text-white hover:bg-blue-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg">
                         {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : 'INICIAR TURNO'}
                     </button>
                 </form>
