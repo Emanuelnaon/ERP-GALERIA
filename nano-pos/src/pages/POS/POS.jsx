@@ -502,97 +502,101 @@ export default function POS() {
     // --- LÓGICA DE COBRO ---
     const total = cart.reduce((acc, item) => acc + item.precio * item.cantidad, 0);
 
-    const iniciarCobro = () => {
-        if (cart.length === 0) return;
-        if (!cajaAbierta) {
-            alert('Bloqueo de seguridad: No podés vender sin abrir la caja.');
-            return;
-        }
-        setMetodoPago('efectivo');
-        setMontoRecibido(''); // Reseteamos el input
-        setMostrarCobro(true); // Abrimos el modal
-    };
+   const iniciarCobro = () => {
+       // 🛡️ PATOVICA 1: No hacer nada si ya está cargando o el carrito está vacío
+       if (loading || cart.length === 0) return;
 
-    const confirmarVentaFinal = async (e) => {
-        if (e) e.preventDefault();
+       if (!cajaAbierta) {
+           alert('Bloqueo de seguridad: No podés vender sin abrir la caja.');
+           return;
+       }
+       setMetodoPago('efectivo');
+       setMontoRecibido(''); // Reseteamos el input
+       setMostrarCobro(true); // Abrimos el modal
+   };
 
-        // Validación básica
-        if (metodoPago === 'efectivo' && montoRecibido !== '' && Number(montoRecibido) < total) {
-            alert('El monto recibido es menor al total a pagar.');
-            return;
-        }
+const confirmarVentaFinal = async (e) => {
+    if (e) e.preventDefault();
 
-        setLoading(true);
-        try {
-            if (!usuarioActual) throw new Error('No hay sesión activa');
-            const ventaData = {
-                p_local_id: localActualId,
-                p_vendedor_id: usuarioActual.id,
-                p_turno_id: cajaAbierta.id,
-                p_total: total,
-                p_metodo_pago: metodoPago,
-                p_detalles: cart,
-            };
+    // 🛡️ PATOVICA 2 (EL MÁS IMPORTANTE): Bloquea el doble Enter o múltiples clics
+    if (loading) return;
 
-            const { data: numeroVenta, error } = await supabase.rpc('procesar_venta', ventaData);
-            if (error) throw error;
+    // Validación básica
+    if (metodoPago === 'efectivo' && montoRecibido !== '' && Number(montoRecibido) < total) {
+        alert('El monto recibido es menor al total a pagar.');
+        return;
+    }
 
-            const localObj = LOCALES_GALERIA.find((l) => l.id === localActualId);
+    setLoading(true); // 🔒 Cerramos la puerta instantáneamente
 
-            // Armamos el ticket para el modal visual
-            setTicketData({
-                cart: [...cart],
-                total: total,
-                numVenta: numeroVenta,
-                localNombre: localObj ? localObj.nombre : 'Local Comercial',
-                vendedorEmail: usuarioActual.identificador || usuarioActual.email.split('@')[0],
-            });
+    try {
+        if (!usuarioActual) throw new Error('No hay sesión activa');
+        const ventaData = {
+            p_local_id: localActualId,
+            p_vendedor_id: usuarioActual.id,
+            p_turno_id: cajaAbierta.id,
+            p_total: total,
+            p_metodo_pago: metodoPago,
+            p_detalles: cart,
+        };
 
-            // 👇 🖨️ ACÁ DISPARAMOS LA IMPRESORA TÉRMICA 👇
-            // Le pasamos los datos: carrito, total, método de pago, con cuánto pagó, y el vuelto.
-            const vueltoCalc = metodoPago === 'efectivo' && montoRecibido ? Number(montoRecibido) - total : 0;
-            const pagoConCalc = metodoPago === 'efectivo' && montoRecibido ? montoRecibido : total;
+        const { data: numeroVenta, error } = await supabase.rpc('procesar_venta', ventaData);
+        if (error) throw error;
 
-            imprimirTicket(
-                cart,
-                total,
-                metodoPago.toUpperCase(),
-                pagoConCalc,
-                vueltoCalc,
-                localObj ? localObj.nombre : 'Local Comercial',
-            );
-            // 👆 ------------------------------------------ 👆
+        const localObj = LOCALES_GALERIA.find((l) => l.id === localActualId);
 
-            // Actualizamos la caja localmente (Solo para efecto rápido, la antena luego la valida)
-            setCajaAbierta((prev) => ({
-                ...prev,
-                efectivo_esperado: Number(prev?.efectivo_esperado || 0) + total,
-            }));
+        // Armamos el ticket para el modal visual
+        setTicketData({
+            cart: [...cart],
+            total: total,
+            numVenta: numeroVenta,
+            localNombre: localObj ? localObj.nombre : 'Local Comercial',
+            vendedorEmail: usuarioActual.identificador || usuarioActual.email.split('@')[0],
+        });
 
-            // El truco visual para la pestaña "Mis Ventas"
-            const nuevaVentaLocal = {
-                id: numeroVenta,
-                created_at: new Date().toISOString(),
-                metodo_pago: metodoPago,
-                total: total,
-            };
+        // 👇 🖨️ ACÁ DISPARAMOS LA IMPRESORA TÉRMICA 👇
+        const vueltoCalc = metodoPago === 'efectivo' && montoRecibido ? Number(montoRecibido) - total : 0;
+        const pagoConCalc = metodoPago === 'efectivo' && montoRecibido ? montoRecibido : total;
 
-            setVentasTurno((prev) => {
-                if (prev.some((v) => v.id === nuevaVentaLocal.id)) return prev;
-                return [nuevaVentaLocal, ...prev];
-            });
+        imprimirTicket(
+            cart,
+            total,
+            metodoPago.toUpperCase(),
+            pagoConCalc,
+            vueltoCalc,
+            localObj ? localObj.nombre : 'Local Comercial',
+        );
 
-            // Limpiamos todo
-            setCart([]);
-            setSearchTerm('');
-            setMostrarCobro(false); // Cerramos el modal
-        } catch (error) {
-            console.error(error);
-            alert('❌ Error al procesar la venta: ' + error.message);
-        } finally {
-            setLoading(false);
-        }
-    };
+        // Actualizamos la caja localmente
+        setCajaAbierta((prev) => ({
+            ...prev,
+            efectivo_esperado: Number(prev?.efectivo_esperado || 0) + total,
+        }));
+
+        // El truco visual para la pestaña "Mis Ventas"
+        const nuevaVentaLocal = {
+            id: numeroVenta,
+            created_at: new Date().toISOString(),
+            metodo_pago: metodoPago,
+            total: total,
+        };
+
+        setVentasTurno((prev) => {
+            if (prev.some((v) => v.id === nuevaVentaLocal.id)) return prev;
+            return [nuevaVentaLocal, ...prev];
+        });
+
+        // Limpiamos todo
+        setCart([]);
+        setSearchTerm('');
+        setMostrarCobro(false); // Cerramos el modal
+    } catch (error) {
+        console.error(error);
+        alert('❌ Error al procesar la venta: ' + error.message);
+    } finally {
+        setLoading(false); // 🔓 Liberamos la puerta al terminar (éxito o error)
+    }
+};
 
     // --- ATAJO F10 (Abre el modal en vez de cobrar directo) ---
     useEffect(() => {
