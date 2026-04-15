@@ -1,4 +1,4 @@
-import { Search, AlertTriangle, ShoppingCart, LayoutDashboard, LogOut, Store, Trash2, Minus, Plus } from 'lucide-react';
+import { Search, AlertTriangle, ShoppingCart, LayoutDashboard, LogOut, Store, Trash2, Minus, Plus, HelpCircle } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { supabase } from '../../services/supabase';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -684,7 +684,7 @@ const confirmarVentaFinal = async (e) => {
                             setMostrarCierre(false);
                             setCajaAbierta(null); // Local state set to null (ahora la antena lo respeta)
                             alert('✅ ¡Turno cerrado exitosamente!');
-                            
+
                             if (rolUsuario === 'admin') {
                                 // Si es el dueño, capaz quiere ir al panel a ver números
                                 navigate('/dashboard');
@@ -882,6 +882,18 @@ const confirmarVentaFinal = async (e) => {
                                 onClick={handleLogout}
                                 className="flex items-center gap-1 md:gap-2 px-3 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg text-xs md:text-sm text-red-400 border border-gray-700">
                                 <LogOut size={14} className="hidden sm:block" /> Salir
+                            </button>
+
+                            {/* BOTÓN DE SOPORTE DIRECTO */}
+                            <button
+                                onClick={() =>
+                                    window.open(
+                                        'https://wa.me/549XXXXXXXXXX?text=Hola%20Ema,%20tengo%20una%20consulta%20con%20el%20sistema%20NANO%20POS:%20',
+                                        '_blank',
+                                    )
+                                }
+                                className="flex items-center gap-1 md:gap-2 px-3 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg text-xs md:text-sm text-green-400 border border-gray-700 transition-colors shadow-lg">
+                                <HelpCircle size={14} className="hidden sm:block" /> Ayuda
                             </button>
                         </div>
                     </div>
