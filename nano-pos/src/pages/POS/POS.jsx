@@ -1,4 +1,15 @@
-import { Search, AlertTriangle, ShoppingCart, LayoutDashboard, LogOut, Store, Trash2, Minus, Plus, HelpCircle } from 'lucide-react';
+import {
+    Search,
+    AlertTriangle,
+    ShoppingCart,
+    LayoutDashboard,
+    LogOut,
+    Store,
+    Trash2,
+    Minus,
+    Plus,
+    HelpCircle,
+} from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { supabase } from '../../services/supabase';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -6,6 +17,7 @@ import AperturaCajaModal from '../../components/AperturaCajaModal';
 import CierreCajaModal from '../../components/CierreCajaModal';
 import GastoModal from '../../components/GastoModal';
 import TicketVentaModal from '../../components/TicketVentaModal';
+import AltaProductoModal from '../../components/AltaProductoModal'; // 👈 IMPORT DEL NUEVO MODAL
 
 const LOCALES_GALERIA = [
     { id: 1, nombre: 'Zapatería' },
@@ -24,10 +36,9 @@ const playErrorSound = () => {
         oscillator.connect(gainNode);
         gainNode.connect(audioCtx.destination);
 
-        oscillator.type = 'sawtooth'; // Tipo de onda áspera para que suene a error
-        oscillator.frequency.setValueAtTime(150, audioCtx.currentTime); // Frecuencia grave
+        oscillator.type = 'sawtooth';
+        oscillator.frequency.setValueAtTime(150, audioCtx.currentTime);
 
-        // Efecto de caída de volumen rápida
         gainNode.gain.setValueAtTime(0.5, audioCtx.currentTime);
         gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
 
@@ -45,7 +56,7 @@ export default function POS() {
     const [loading, setLoading] = useState(false);
     const [ticketData, setTicketData] = useState(null);
 
-    // --- ESTADOS PARA EL MODAL DE COBRO ---
+    // --- ESTADOS PARA MODALES ---
     const [mostrarCobro, setMostrarCobro] = useState(false);
     const [metodoPago, setMetodoPago] = useState('efectivo');
     const [montoRecibido, setMontoRecibido] = useState('');
@@ -56,20 +67,20 @@ export default function POS() {
 
     const [mostrarCierre, setMostrarCierre] = useState(false);
     const [mostrarGasto, setMostrarGasto] = useState(false);
+    const [mostrarAltaModal, setMostrarAltaModal] = useState(false); // 👈 ESTADO PARA EL ALTA RÁPIDA
 
     const [localActualId, setLocalActualId] = useState(null);
     const [rolUsuario, setRolUsuario] = useState('vendedor');
     const navigate = useNavigate();
     const location = useLocation();
 
-    const [vistaActiva, setVistaActiva] = useState('catalogo'); // Controla qué pestaña vemos
-    const [ventasTurno, setVentasTurno] = useState([]); // Guarda el historial de ventas
+    const [vistaActiva, setVistaActiva] = useState('catalogo');
+    const [ventasTurno, setVentasTurno] = useState([]);
     const [gastosTurno, setGastosTurno] = useState([]);
     const [cargandoVentas, setCargandoVentas] = useState(false);
     const [mensajeFlotante, setMensajeFlotante] = useState(null);
 
     const handleLogout = async () => {
-        // EL CANDADO: Si hay caja abierta, frenamos la salida
         if (cajaAbierta) {
             const confirmarRelevo = window.confirm(
                 '⚠️ ALERTA: Tenés la caja ABIERTA con dinero sin declarar.\n\n' +
@@ -77,11 +88,8 @@ export default function POS() {
                     "- Si tu turno terminó, tocá 'Cancelar' y hacé el Cierre de Caja.\n" +
                     "- Si es un relevo, tocá 'Aceptar' para salir.",
             );
-
-            if (!confirmarRelevo) return; // Si toca cancelar, lo dejamos en el POS
+            if (!confirmarRelevo) return;
         }
-
-        // Si no hay caja abierta, o si confirmó el relevo, cerramos sesión
         await supabase.auth.signOut();
     };
 
@@ -89,7 +97,7 @@ export default function POS() {
     useEffect(() => {
         const initUser = async () => {
             setVerificandoCaja(true);
-            let rolLocal = 'vendedor'; // Creamos una variable auxiliar
+            let rolLocal = 'vendedor';
 
             try {
                 const {
@@ -103,8 +111,8 @@ export default function POS() {
                         .eq('id', user.id)
                         .single();
 
-                    rolLocal = perfil?.user_role || 'vendedor'; // Guardamos acá
-                    setRolUsuario(rolLocal); // Actualizamos el estado para la UI
+                    rolLocal = perfil?.user_role || 'vendedor';
+                    setRolUsuario(rolLocal);
 
                     const identificadorCajero = perfil?.dni || user.email.split('@')[0];
                     user.identificador = identificadorCajero;
@@ -134,14 +142,13 @@ export default function POS() {
             } catch (error) {
                 console.error('Error verificando usuario:', error);
             } finally {
-                // 👇 Usamos la variable local, NO el estado, así no hace falta en el array
                 if (localStorage.getItem('nano_pos_device_local') || rolLocal === 'admin') {
                     setVerificandoCaja(false);
                 }
             }
         };
         initUser();
-    }, [location.state?.localDestino, navigate]); // 👈 El array queda limpio y seguro
+    }, [location.state?.localDestino, navigate]);
 
     // 2. BUSCAR CAJA CADA VEZ QUE CAMBIA EL LOCAL
     useEffect(() => {
@@ -176,14 +183,12 @@ export default function POS() {
         const cargarHistorial = async () => {
             setCargandoVentas(true);
             try {
-                // 1. Traemos Ventas
                 const { data: ventas } = await supabase
                     .from('ventas')
                     .select('*')
                     .eq('turno_id', cajaAbierta.id)
                     .order('created_at', { ascending: false });
 
-                // 2. Traemos Retiros
                 const { data: gastos } = await supabase
                     .from('gastos_caja')
                     .select('*')
@@ -201,19 +206,15 @@ export default function POS() {
 
         cargarHistorial();
 
-        // -- ANTENAS --
         const canalCaja = supabase
             .channel('caja-actual')
             .on(
                 'postgres_changes',
                 { event: 'UPDATE', schema: 'public', table: 'turnos_caja', filter: `id=eq.${cajaAbierta.id}` },
                 (payload) => {
-                    // 👇 EL ESCUDO ANTI-F5 👇
                     if (payload.new.estado === 'CERRADO') {
-                        // Si la base de datos dice que se cerró, limpiamos la variable para que salte el Modal de Apertura
                         setCajaAbierta(null);
                     } else {
-                        // Si sigue abierta (ej: se actualizó un vuelto), actualizamos los datos nomás
                         setCajaAbierta(payload.new);
                     }
                 },
@@ -260,7 +261,6 @@ export default function POS() {
         if (!term) return setProducts([]);
         setLoading(true);
 
-        // 1. Petición A: Busca SOLO por nombre
         const fetchPorNombre = supabase
             .from('variantes')
             .select(`id, codigo_barras, stock_actual, talle, precio:productos!inner(precio_base, nombre)`)
@@ -268,7 +268,6 @@ export default function POS() {
             .ilike('productos.nombre', `%${term}%`)
             .limit(10);
 
-        // 2. Petición B: Busca SOLO por código de barras
         const fetchPorCodigo = supabase
             .from('variantes')
             .select(`id, codigo_barras, stock_actual, talle, precio:productos!inner(precio_base, nombre)`)
@@ -276,14 +275,10 @@ export default function POS() {
             .ilike('codigo_barras', `%${term}%`)
             .limit(10);
 
-        // Las disparamos a las dos a la vez de forma independiente
         const [resNombre, resCodigo] = await Promise.all([fetchPorNombre, fetchPorCodigo]);
 
         if (!resNombre.error && !resCodigo.error) {
-            // Juntamos los resultados
             const combinados = [...resNombre.data, ...resCodigo.data];
-
-            // Limpiamos los repetidos por si un producto saltó en ambas listas
             const unicos = Array.from(new Map(combinados.map((item) => [item.id, item])).values());
 
             const formatted = unicos
@@ -306,23 +301,13 @@ export default function POS() {
 
     // --- 🖨️ MOTOR DE IMPRESIÓN TÉRMICA ---
     const imprimirTicket = (carritoVenta, totalVenta, metodo, pagaCon, vuelto, nombreLocal) => {
-        // Creamos una ventana invisible
         const ventana = window.open('', 'PRINT', 'height=400,width=600');
-
-        // Le inyectamos el diseño clásico de ticket de supermercado/kiosco
         ventana.document.write(`
             <html>
                 <head>
                     <title>Ticket de Venta</title>
                     <style>
-                        /* Forzamos el ancho para rollo térmico estándar (58mm) */
-                        body { 
-                            font-family: monospace; 
-                            width: 58mm; 
-                            margin: 0 auto; 
-                            padding: 2mm; 
-                            color: #000;
-                        }
+                        body { font-family: monospace; width: 58mm; margin: 0 auto; padding: 2mm; color: #000; }
                         h2, h3 { text-align: center; margin: 0 0 5px 0; font-size: 14px; }
                         p { margin: 2px 0; font-size: 12px; }
                         .divisor { border-top: 1px dashed #000; margin: 5px 0; }
@@ -333,7 +318,6 @@ export default function POS() {
                         .precio { width: 30%; text-align: right; }
                         .total-txt { font-size: 14px; font-weight: bold; text-align: right; margin-top: 5px; }
                         .centrado { text-align: center; }
-                        /* 👇 Estilo para el aviso legal */
                         .legal { text-align: center; font-size: 9px; font-weight: bold; border: 1px solid #000; padding: 2px; margin-bottom: 5px; }
                     </style>
                 </head>
@@ -343,7 +327,6 @@ export default function POS() {
                     <p class="centrado">Ticket de Control Interno</p>
                     <p>Fecha: ${new Date().toLocaleString('es-AR')}</p>
                     <div class="divisor"></div>
-                    
                     <table>
                         <thead>
                             <tr>
@@ -366,19 +349,16 @@ export default function POS() {
                                 .join('')}
                         </tbody>
                     </table>
-                    
                     <div class="divisor"></div>
                     <p class="total-txt">TOTAL: $${totalVenta}</p>
                     <p>Pago: ${metodo}</p>
                     ${metodo === 'EFECTIVO' ? `<p>Abona con: $${pagaCon}<br>Vuelto: $${vuelto}</p>` : ''}
-                    
                     <div class="divisor"></div>
                     <p class="centrado">¡Gracias por su compra!</p>
                 </body>
             </html>
         `);
 
-        // Cerramos el documento, disparamos la impresora y matamos la ventana
         ventana.document.close();
         ventana.focus();
         setTimeout(() => {
@@ -396,30 +376,19 @@ export default function POS() {
             .from('variantes')
             .select(`id, codigo_barras, stock_actual, talle, precio:productos!inner(precio_base, nombre)`)
             .eq('productos.local_id', localActualId)
-            .eq('codigo_barras', codigo) // Buscamos coincidencia EXACTA
-            .single(); // Traemos solo uno
+            .eq('codigo_barras', codigo)
+            .single();
 
-        // 👇 AHORA USAMOS LA ALERTA FLOTANTE Y EL SONIDO
         if (error || !data) {
             console.warn('Código no encontrado:', error?.message);
-
-            // Reproducir sonido de error
             playErrorSound();
-
-            // Mostrar mensaje flotante
             setMensajeFlotante(`El código ${codigo} no existe.`);
-
-            // Desaparecer el mensaje a los 3 segundos
-            setTimeout(() => {
-                setMensajeFlotante(null);
-            }, 3000);
-
+            setTimeout(() => setMensajeFlotante(null), 3000);
             setSearchTerm('');
             setLoading(false);
-            return; // Cortamos la función acá
+            return;
         }
 
-        // Si llegó acá, es porque encontró el producto
         const productoEscaneado = {
             id: data.id,
             nombre: data.precio.nombre,
@@ -429,8 +398,8 @@ export default function POS() {
             codigo: data.codigo_barras,
         };
 
-        addToCart(productoEscaneado); // Lo mandamos directo al carrito
-        setSearchTerm(''); // Limpiamos el buscador
+        addToCart(productoEscaneado);
+        setSearchTerm('');
         setLoading(false);
     };
 
@@ -447,7 +416,6 @@ export default function POS() {
             else setProducts([]);
         }, 300);
         return () => clearTimeout(timeout);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [searchTerm]);
 
     // --- CARRITO Y COBRO ---
@@ -456,7 +424,6 @@ export default function POS() {
             const exists = currentCart.find((item) => item.id === product.id);
             const cantidadActual = exists ? exists.cantidad : 0;
 
-            // 🛑 EL MURO DE SEGURIDAD DEL STOCK
             if (cantidadActual + 1 > product.stock) {
                 alert(
                     `⚠️ Stock insuficiente. Solo tenés ${product.stock} unidades de "${product.nombre}" en tu local.`,
@@ -473,20 +440,17 @@ export default function POS() {
         });
     };
 
-    // --- CONTROL DE CANTIDADES Y ELIMINAR ÍTEMS ---
     const updateQuantity = (productId, change, maxStock) => {
         setCart((currentCart) => {
             return currentCart
                 .map((item) => {
                     if (item.id === productId) {
                         const nuevaCantidad = item.cantidad + change;
-                        // Muro de seguridad del stock
                         if (change > 0 && nuevaCantidad > maxStock) {
                             alert(`⚠️ Stock insuficiente. Solo tenés ${maxStock} unidades.`);
                             return item;
                         }
                         if (nuevaCantidad <= 0) return { ...item, cantidad: 0 };
-
                         return { ...item, cantidad: nuevaCantidad };
                     }
                     return item;
@@ -499,106 +463,96 @@ export default function POS() {
         setCart((currentCart) => currentCart.filter((item) => item.id !== productId));
     };
 
-    // --- LÓGICA DE COBRO ---
     const total = cart.reduce((acc, item) => acc + item.precio * item.cantidad, 0);
 
-   const iniciarCobro = () => {
-       // 🛡️ PATOVICA 1: No hacer nada si ya está cargando o el carrito está vacío
-       if (loading || cart.length === 0) return;
+    const iniciarCobro = () => {
+        if (loading || cart.length === 0) return;
 
-       if (!cajaAbierta) {
-           alert('Bloqueo de seguridad: No podés vender sin abrir la caja.');
-           return;
-       }
-       setMetodoPago('efectivo');
-       setMontoRecibido(''); // Reseteamos el input
-       setMostrarCobro(true); // Abrimos el modal
-   };
+        if (!cajaAbierta) {
+            alert('Bloqueo de seguridad: No podés vender sin abrir la caja.');
+            return;
+        }
+        setMetodoPago('efectivo');
+        setMontoRecibido('');
+        setMostrarCobro(true);
+    };
 
-const confirmarVentaFinal = async (e) => {
-    if (e) e.preventDefault();
+    const confirmarVentaFinal = async (e) => {
+        if (e) e.preventDefault();
 
-    // 🛡️ PATOVICA 2 (EL MÁS IMPORTANTE): Bloquea el doble Enter o múltiples clics
-    if (loading) return;
+        if (loading) return;
 
-    // Validación básica
-    if (metodoPago === 'efectivo' && montoRecibido !== '' && Number(montoRecibido) < total) {
-        alert('El monto recibido es menor al total a pagar.');
-        return;
-    }
+        if (metodoPago === 'efectivo' && montoRecibido !== '' && Number(montoRecibido) < total) {
+            alert('El monto recibido es menor al total a pagar.');
+            return;
+        }
 
-    setLoading(true); // 🔒 Cerramos la puerta instantáneamente
+        setLoading(true);
 
-    try {
-        if (!usuarioActual) throw new Error('No hay sesión activa');
-        const ventaData = {
-            p_local_id: localActualId,
-            p_vendedor_id: usuarioActual.id,
-            p_turno_id: cajaAbierta.id,
-            p_total: total,
-            p_metodo_pago: metodoPago,
-            p_detalles: cart,
-        };
+        try {
+            if (!usuarioActual) throw new Error('No hay sesión activa');
+            const ventaData = {
+                p_local_id: localActualId,
+                p_vendedor_id: usuarioActual.id,
+                p_turno_id: cajaAbierta.id,
+                p_total: total,
+                p_metodo_pago: metodoPago,
+                p_detalles: cart,
+            };
 
-        const { data: numeroVenta, error } = await supabase.rpc('procesar_venta', ventaData);
-        if (error) throw error;
+            const { data: numeroVenta, error } = await supabase.rpc('procesar_venta', ventaData);
+            if (error) throw error;
 
-        const localObj = LOCALES_GALERIA.find((l) => l.id === localActualId);
+            const localObj = LOCALES_GALERIA.find((l) => l.id === localActualId);
 
-        // Armamos el ticket para el modal visual
-        setTicketData({
-            cart: [...cart],
-            total: total,
-            numVenta: numeroVenta,
-            localNombre: localObj ? localObj.nombre : 'Local Comercial',
-            vendedorEmail: usuarioActual.identificador || usuarioActual.email.split('@')[0],
-        });
+            setTicketData({
+                cart: [...cart],
+                total: total,
+                numVenta: numeroVenta,
+                localNombre: localObj ? localObj.nombre : 'Local Comercial',
+                vendedorEmail: usuarioActual.identificador || usuarioActual.email.split('@')[0],
+            });
 
-        // 👇 🖨️ ACÁ DISPARAMOS LA IMPRESORA TÉRMICA 👇
-        const vueltoCalc = metodoPago === 'efectivo' && montoRecibido ? Number(montoRecibido) - total : 0;
-        const pagoConCalc = metodoPago === 'efectivo' && montoRecibido ? montoRecibido : total;
+            const vueltoCalc = metodoPago === 'efectivo' && montoRecibido ? Number(montoRecibido) - total : 0;
+            const pagoConCalc = metodoPago === 'efectivo' && montoRecibido ? montoRecibido : total;
 
-        imprimirTicket(
-            cart,
-            total,
-            metodoPago.toUpperCase(),
-            pagoConCalc,
-            vueltoCalc,
-            localObj ? localObj.nombre : 'Local Comercial',
-        );
+            imprimirTicket(
+                cart,
+                total,
+                metodoPago.toUpperCase(),
+                pagoConCalc,
+                vueltoCalc,
+                localObj ? localObj.nombre : 'Local Comercial',
+            );
 
-        // Actualizamos la caja localmente
-        setCajaAbierta((prev) => ({
-            ...prev,
-            efectivo_esperado: Number(prev?.efectivo_esperado || 0) + total,
-        }));
+            setCajaAbierta((prev) => ({
+                ...prev,
+                efectivo_esperado: Number(prev?.efectivo_esperado || 0) + total,
+            }));
 
-        // El truco visual para la pestaña "Mis Ventas"
-        const nuevaVentaLocal = {
-            id: numeroVenta,
-            created_at: new Date().toISOString(),
-            metodo_pago: metodoPago,
-            total: total,
-        };
+            const nuevaVentaLocal = {
+                id: numeroVenta,
+                created_at: new Date().toISOString(),
+                metodo_pago: metodoPago,
+                total: total,
+            };
 
-        setVentasTurno((prev) => {
-            if (prev.some((v) => v.id === nuevaVentaLocal.id)) return prev;
-            return [nuevaVentaLocal, ...prev];
-        });
+            setVentasTurno((prev) => {
+                if (prev.some((v) => v.id === nuevaVentaLocal.id)) return prev;
+                return [nuevaVentaLocal, ...prev];
+            });
 
-        // Limpiamos todo
-        setCart([]);
-        setSearchTerm('');
-        setMostrarCobro(false); // Cerramos el modal
-    } catch (error) {
-        console.error(error);
-        alert('❌ Error al procesar la venta: ' + error.message);
-    } finally {
-        setLoading(false); // 🔓 Liberamos la puerta al terminar (éxito o error)
-    }
-};
+            setCart([]);
+            setSearchTerm('');
+            setMostrarCobro(false);
+        } catch (error) {
+            console.error(error);
+            alert('❌ Error al procesar la venta: ' + error.message);
+        } finally {
+            setLoading(false);
+        }
+    };
 
-    // --- ATAJO F10 (Abre el modal en vez de cobrar directo) ---
     useEffect(() => {
         const manejarTeclas = (evento) => {
             if (evento.key === 'F10') {
@@ -607,14 +561,12 @@ const confirmarVentaFinal = async (e) => {
                     iniciarCobro();
                 }
             }
-            // Si el modal está abierto, Enter confirma y Escape lo cierra
             if (mostrarCobro) {
                 if (evento.key === 'Escape') setMostrarCobro(false);
             }
         };
         window.addEventListener('keydown', manejarTeclas);
         return () => window.removeEventListener('keydown', manejarTeclas);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [cart, loading, cajaAbierta, mostrarCierre, mostrarCobro]);
 
     if (verificandoCaja) {
@@ -630,28 +582,18 @@ const confirmarVentaFinal = async (e) => {
             '¿Confirmas el relevo? Se cerrará tu sesión pero la caja permanecerá ABIERTA para el siguiente compañero.',
         );
         if (confirm) {
-            // Aquí podrías disparar un log en Supabase: "Usuario X entregó a las HH:MM"
             await supabase.auth.signOut();
             navigate('/login');
         }
     };
 
-    // --- CÁLCULOS MATEMÁTICOS DEL TABLERO EN TIEMPO REAL ---
     const fondoInicial = Number(cajaAbierta?.saldo_inicial || 0);
-
-    // Total vendido (Suma Efectivo y Transferencias para las estadísticas)
     const totalVendido = ventasTurno.reduce((acc, v) => acc + Number(v.total), 0);
-
-    // Solo lo vendido en EFECTIVO (porque las transferencias no van al cajón físico)
     const ventasEfectivo = ventasTurno
         .filter((v) => v.metodo_pago?.toLowerCase() === 'efectivo')
         .reduce((acc, v) => acc + Number(v.total), 0);
-
     const totalRetiros = gastosTurno.reduce((acc, g) => acc + Number(g.monto), 0);
-
-    // 💰 LA VERDAD ABSOLUTA DEL CAJÓN FÍSICO
     const dineroFisicoEnCaja = fondoInicial + ventasEfectivo - totalRetiros;
-    // --------------------------------------------------------
 
     return (
         <div className="flex h-screen bg-gray-900 text-white overflow-hidden relative print:bg-white print:h-auto print:overflow-visible">
@@ -667,7 +609,6 @@ const confirmarVentaFinal = async (e) => {
                 </div>
             )}
 
-            {/* 👇 MENSAJE FLOTANTE DE ERROR (TOAST) 👇 */}
             {mensajeFlotante && (
                 <div className="absolute top-10 left-1/2 transform -translate-x-1/2 z-[60] bg-red-600 text-white px-6 py-3 rounded-xl shadow-2xl border-2 border-red-400 font-bold flex items-center gap-3 animate-bounce">
                     <AlertTriangle size={24} />
@@ -682,14 +623,11 @@ const confirmarVentaFinal = async (e) => {
                         onClose={() => setMostrarCierre(false)}
                         onCierreExitoso={async () => {
                             setMostrarCierre(false);
-                            setCajaAbierta(null); // Local state set to null (ahora la antena lo respeta)
+                            setCajaAbierta(null);
                             alert('✅ ¡Turno cerrado exitosamente!');
-
                             if (rolUsuario === 'admin') {
-                                // Si es el dueño, capaz quiere ir al panel a ver números
                                 navigate('/dashboard');
                             } else {
-                                // Si es vendedor, cerramos su sesión sí o sí para que entre el próximo
                                 await supabase.auth.signOut();
                                 navigate('/login');
                             }
@@ -698,7 +636,6 @@ const confirmarVentaFinal = async (e) => {
                 </div>
             )}
 
-            {/* 👇 MODAL DE COBRO F10 👇 */}
             {mostrarCobro && (
                 <div className="absolute inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
                     <div className="bg-gray-900 border-2 border-blue-500 rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in duration-200">
@@ -706,17 +643,13 @@ const confirmarVentaFinal = async (e) => {
                             <h2 className="text-3xl font-bold text-white mb-1">Confirmar Venta</h2>
                             <p className="text-blue-100 font-medium">Ticket por {cart.length} artículos</p>
                         </div>
-
                         <form onSubmit={confirmarVentaFinal} className="p-8 space-y-6">
-                            {/* Total a Pagar Gigante */}
                             <div className="flex justify-between items-end border-b border-gray-700 pb-4">
                                 <span className="text-gray-400 text-xl font-bold">Total a Pagar</span>
                                 <span className="text-5xl font-extrabold text-green-400">
                                     ${total.toLocaleString()}
                                 </span>
                             </div>
-
-                            {/* Selector de Método de Pago */}
                             <div className="grid grid-cols-2 gap-4">
                                 <button
                                     type="button"
@@ -731,14 +664,12 @@ const confirmarVentaFinal = async (e) => {
                                     type="button"
                                     onClick={() => {
                                         setMetodoPago('transferencia');
-                                        setMontoRecibido(total.toString()); // Autocompleta el total
+                                        setMontoRecibido(total.toString());
                                     }}
                                     className={`py-4 rounded-xl font-bold text-lg border-2 transition-all ${metodoPago === 'transferencia' ? 'bg-indigo-600 border-indigo-400 text-white' : 'bg-gray-800 border-gray-700 text-gray-400 hover:bg-gray-700'}`}>
                                     📱 Transferencia
                                 </button>
                             </div>
-
-                            {/* Input para calcular vuelto (Solo si es efectivo) */}
                             {metodoPago === 'efectivo' && (
                                 <div className="space-y-2">
                                     <label className="text-gray-400 font-bold">Abonó con:</label>
@@ -748,7 +679,7 @@ const confirmarVentaFinal = async (e) => {
                                         </span>
                                         <input
                                             type="number"
-                                            autoFocus // 👈 Clave para no usar el mouse
+                                            autoFocus
                                             min={total}
                                             value={montoRecibido}
                                             onChange={(e) => setMontoRecibido(e.target.value)}
@@ -756,8 +687,6 @@ const confirmarVentaFinal = async (e) => {
                                             placeholder={total.toString()}
                                         />
                                     </div>
-
-                                    {/* Cálculo del vuelto automático */}
                                     {montoRecibido && Number(montoRecibido) >= total && (
                                         <div className="flex justify-between items-center bg-gray-800 p-4 rounded-xl mt-4">
                                             <span className="text-gray-300 font-bold">Su vuelto:</span>
@@ -768,8 +697,6 @@ const confirmarVentaFinal = async (e) => {
                                     )}
                                 </div>
                             )}
-
-                            {/* Botones de acción */}
                             <div className="flex gap-4 pt-4">
                                 <button
                                     type="button"
@@ -803,13 +730,22 @@ const confirmarVentaFinal = async (e) => {
                 </div>
             )}
 
+            {/* 👇 ACÁ SE RENDERIZA EL ALTA RÁPIDA CUANDO ES TRUE 👇 */}
+            {mostrarAltaModal && (
+                <AltaProductoModal
+                    localId={localActualId}
+                    onClose={() => setMostrarAltaModal(false)}
+                    onGuardado={(nombreGuardado) => {
+                        setMostrarAltaModal(false);
+                        alert(`✅ Producto "${nombreGuardado}" agregado exitosamente.`);
+                    }}
+                />
+            )}
+
             <div
                 className={`flex flex-col lg:flex-row w-full h-full print:hidden ${!cajaAbierta || mostrarCierre ? 'blur-md pointer-events-none' : ''}`}>
                 <div className="w-full lg:w-[70%] xl:w-[75%] p-4 lg:p-6 flex flex-col border-b lg:border-b-0 lg:border-r border-gray-800 h-[60vh] lg:h-full">
-                    {/* ENCABEZADO Y CONTROLES */}
-                    {/* 👇 Agregamos flex-wrap al contenedor principal y un gap-4 para la separación */}
                     <div className="flex flex-wrap justify-between items-center gap-4 mb-6">
-                        {/* PESTAÑAS */}
                         <div className="flex bg-gray-950 p-1 rounded-lg border border-gray-800 shadow-inner w-full md:w-auto">
                             <button
                                 onClick={() => setVistaActiva('catalogo')}
@@ -832,10 +768,7 @@ const confirmarVentaFinal = async (e) => {
                             </button>
                         </div>
 
-                        {/* BOTONES DE ACCIÓN */}
-                        {/* 👇 Agregamos flex-wrap a los botones y achicamos un poco la letra en móviles */}
                         <div className="flex flex-wrap gap-2 md:gap-3 items-center w-full xl:w-auto justify-start xl:justify-end">
-                            {/* SELECTOR DE LOCAL (Solo para Admin) */}
                             {rolUsuario === 'admin' && (
                                 <div className="flex items-center gap-2 bg-gray-800 px-2 py-2 rounded-lg border border-gray-700">
                                     <Store size={16} className="text-blue-400 hidden sm:block" />
@@ -850,6 +783,15 @@ const confirmarVentaFinal = async (e) => {
                                         ))}
                                     </select>
                                 </div>
+                            )}
+
+                            {/* 👇 BOTÓN VERDE DE ALTA PRODUCTO (SOLO ADMIN) 👇 */}
+                            {rolUsuario === 'admin' && (
+                                <button
+                                    onClick={() => setMostrarAltaModal(true)}
+                                    className="flex items-center gap-1 md:gap-2 px-3 py-2 bg-green-600 hover:bg-green-700 rounded-lg text-xs md:text-sm font-bold text-white shadow-lg transition-colors">
+                                    <Plus size={16} className="hidden sm:block" /> Alta Rápida
+                                </button>
                             )}
 
                             <button
@@ -884,7 +826,6 @@ const confirmarVentaFinal = async (e) => {
                                 <LogOut size={14} className="hidden sm:block" /> Salir
                             </button>
 
-                            {/* BOTÓN DE SOPORTE DIRECTO */}
                             <button
                                 onClick={() =>
                                     window.open(
@@ -898,7 +839,6 @@ const confirmarVentaFinal = async (e) => {
                         </div>
                     </div>
 
-                    {/* 👇 BUSCADOR (Oculto en historial) */}
                     {vistaActiva === 'catalogo' && (
                         <input
                             autoFocus
@@ -911,7 +851,6 @@ const confirmarVentaFinal = async (e) => {
                         />
                     )}
 
-                    {/* 👇 ÁREA DINÁMICA: PRODUCTOS O HISTORIAL 👇 */}
                     {vistaActiva === 'catalogo' ? (
                         <div className="flex-1 overflow-y-auto grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 content-start pr-2">
                             {products.map((p) => (
@@ -938,10 +877,7 @@ const confirmarVentaFinal = async (e) => {
                     ) : (
                         <div className="flex-1 overflow-y-auto bg-gray-900 rounded-xl border border-gray-800 p-4 pr-2">
                             <h3 className="text-xl font-bold mb-4 text-gray-300">Resumen del Turno</h3>
-
-                            {/* 👇 TABLERO DE RESUMEN (4 BLOQUES) 👇 */}
                             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 bg-gray-800 p-4 rounded-xl border border-gray-700 mb-6 shadow-lg">
-                                {/* 1. Fondo Inicial */}
                                 <div className="p-3 bg-gray-900 rounded-lg border border-gray-700 flex flex-col justify-center">
                                     <p className="text-gray-400 text-[10px] md:text-xs font-bold uppercase mb-1">
                                         Fondo Inicial
@@ -950,8 +886,6 @@ const confirmarVentaFinal = async (e) => {
                                         ${fondoInicial.toLocaleString()}
                                     </p>
                                 </div>
-
-                                {/* 2. Total Vendido (Global) */}
                                 <div className="p-3 bg-gray-900 rounded-lg border border-gray-700 flex flex-col justify-center">
                                     <p className="text-gray-400 text-[10px] md:text-xs font-bold uppercase mb-1">
                                         Total Vendido
@@ -960,8 +894,6 @@ const confirmarVentaFinal = async (e) => {
                                         ${totalVendido.toLocaleString()}
                                     </p>
                                 </div>
-
-                                {/* 3. Retiros */}
                                 <div className="p-3 bg-gray-900 rounded-lg border border-gray-700 flex flex-col justify-center">
                                     <p className="text-gray-400 text-[10px] md:text-xs font-bold uppercase mb-1">
                                         Retiros
@@ -970,8 +902,6 @@ const confirmarVentaFinal = async (e) => {
                                         -${totalRetiros.toLocaleString()}
                                     </p>
                                 </div>
-
-                                {/* 4. Efectivo a Rendir */}
                                 <div className="p-3 bg-gray-900 rounded-lg border-2 border-green-900/50 flex flex-col justify-center">
                                     <p className="text-green-400/80 text-[10px] md:text-xs font-bold uppercase mb-1">
                                         Efectivo a Rendir
@@ -981,12 +911,9 @@ const confirmarVentaFinal = async (e) => {
                                     </p>
                                 </div>
                             </div>
-                            {/* 👆 FIN DEL TABLERO 👆 */}
-
                             <h3 className="text-lg font-bold mb-4 text-gray-400 border-b border-gray-800 pb-2">
                                 Historial de Tickets
                             </h3>
-
                             {cargandoVentas ? (
                                 <p className="text-center text-gray-500 mt-10">Cargando historial...</p>
                             ) : ventasTurno.length === 0 ? (
@@ -1040,8 +967,6 @@ const confirmarVentaFinal = async (e) => {
                                         ${item.precio * item.cantidad}
                                     </div>
                                 </div>
-
-                                {/* Controles de cantidad y Eliminar */}
                                 <div className="flex justify-between items-center mt-2 border-t border-gray-800 pt-2">
                                     <div className="flex items-center gap-3 bg-gray-950 rounded-lg p-1 border border-gray-700">
                                         <button
@@ -1056,7 +981,6 @@ const confirmarVentaFinal = async (e) => {
                                             <Plus size={16} />
                                         </button>
                                     </div>
-
                                     <button
                                         onClick={() => removeFromCart(item.id)}
                                         className="text-red-500 hover:text-red-400 p-2 hover:bg-red-500/10 rounded-lg transition-colors"
@@ -1087,7 +1011,7 @@ const confirmarVentaFinal = async (e) => {
                     </div>
                 </div>
             </div>
-            {/* MODAL DE TICKET DE VENTA (Se muestra al cobrar) */}
+
             {ticketData && (
                 <TicketVentaModal
                     cart={ticketData.cart}
