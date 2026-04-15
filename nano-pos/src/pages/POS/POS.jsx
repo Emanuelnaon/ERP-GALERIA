@@ -888,7 +888,7 @@ const confirmarVentaFinal = async (e) => {
                             <button
                                 onClick={() =>
                                     window.open(
-                                        'https://wa.me/549XXXXXXXXXX?text=Hola%20Ema,%20tengo%20una%20consulta%20con%20el%20sistema%20NANO%20POS:%20',
+                                        'https://wa.me/5491128555582?text=Hola%20Ema,%20tengo%20una%20consulta%20con%20el%20sistema%20NANO%20POS:%20',
                                         '_blank',
                                     )
                                 }
